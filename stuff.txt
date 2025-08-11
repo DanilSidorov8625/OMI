@@ -1,0 +1,5 @@
+redis
+tests
+make app.js production ready and scalable
+
+gestures on mobile

@@ -1,0 +1,243 @@
+:root{
+  --bg:#0f1115; --card:#111827; --text:#e5e7eb; --accent:#3b82f6; --muted:#6b7280; --good:#10b981;
+  --space:8px;
+  --touch:44px; /* minimum touch target */
+}
+
+/* Base */
+*{ box-sizing:border-box; }
+html, body{ height:100%; }
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial;
+  /* iOS notch support */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Top bar */
+#topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  gap: var(--space);
+  padding:10px 16px;
+  background:#0b1220;
+  position:sticky; top:0; z-index:10;
+  /* account for top notch */
+  padding-top: calc(10px + env(safe-area-inset-top));
+}
+#topbar h1{ margin:0; font-size:18px; letter-spacing:.5px; }
+#topbar .actions{ display:flex; gap:var(--space); align-items:center; flex-wrap:wrap; }
+#uploadBtn,
+#toggleFeedBtn{
+  min-height: var(--touch);
+  min-width: var(--touch);
+  padding:10px 14px;
+  border-radius:10px;
+  font-size:14px;
+}
+#uploadBtn{ background:var(--accent); border:none; color:white; cursor:pointer; }
+#uploadBtn:hover{ opacity:.9; }
+#toggleFeedBtn{
+  background:#0c1424; border:1px solid #1f2937; color:#e5e7eb; cursor:pointer;
+}
+#toggleFeedBtn[aria-pressed="true"]{ background:#16233b; }
+
+#caption{
+  background:#0c1424; border:1px solid #1f2937; color:var(--text);
+  padding:10px 12px; border-radius:10px; width:240px; min-height: var(--touch);
+}
+#status{ color:var(--muted); font-size:12px; }
+
+/* Layout */
+main{
+  display:grid; grid-template-columns: 1fr 320px;
+  gap:12px; padding:12px;
+}
+
+/* Canvas pane */
+#canvasWrap{
+  position:relative;
+  background:var(--card);
+  border:1px solid #1f2937;
+  border-radius:12px;
+  overflow:hidden;
+  /* Desktop height fallback */
+  min-height: 480px;
+}
+#board{
+  width:100%; height:100%; display:block;
+  background:radial-gradient(ellipse at center, #0d1628 0%, #0a0f1c 100%);
+}
+#hint{
+  position:absolute; left:8px; bottom:8px;
+  color:#9ca3af; font-size:12px;
+  background:rgba(0,0,0,.3); padding:4px 6px; border-radius:6px;
+}
+
+/* Feed */
+#feed{
+  background:var(--card);
+  border:1px solid #1f2937;
+  border-radius:12px;
+  padding:10px;
+  overflow:auto;
+  max-height:calc(100vh - 80px - env(safe-area-inset-top));
+}
+#feed h3{ margin:0 0 8px 0; font-size:14px; color:#cbd5e1; }
+#feedList{ list-style:none; padding:0; margin:0; display:grid; gap:8px; }
+#feedList li{
+  display:flex; gap:8px; align-items:center;
+  background:#0e1626; border:1px solid #1f2937;
+  padding:8px; border-radius:10px;
+}
+#feedList img{
+  width:48px; height:48px; object-fit:cover;
+  border-radius:8px; border:1px solid #1f2937;
+}
+.coords{ color:#9ca3af; font-size:12px; }
+.caption{ color:#e5e7eb; font-size:13px; }
+
+/* Hide feed mode */
+.feed-hidden main { grid-template-columns: 1fr; }
+.feed-hidden #feed { display: none; }
+
+/* --- Responsive --- */
+
+/* Tablets & small desktops */
+@media (max-width: 1024px){
+  #caption{ width:200px; }
+  main{ grid-template-columns: 1fr 280px; }
+  #feedList img{ width:44px; height:44px; }
+}
+
+/* Phones */
+@media (max-width: 768px){
+  /* One column layout; feed stacks under canvas and is collapsible via toggle */
+  main{ grid-template-columns: 1fr; padding:10px; gap:10px; }
+
+  #topbar h1{ font-size:16px; }
+  #caption{ width:min(60vw, 260px); flex:1 1 auto; }
+
+  /* Make the canvas fill viewport height minus top bar */
+  #canvasWrap{
+    min-height: 0; /* allow smaller than 480 on phones */
+    height: calc(100svh - 72px - env(safe-area-inset-top)); /* svh = small viewport on mobile */
+  }
+  #feed{
+    max-height: none;
+    height: auto; /* let it grow naturally under canvas */
+  }
+
+  /* Larger touch targets */
+  #feedList img{ width:56px; height:56px; }
+  #feedList li{ padding:10px; }
+}
+
+/* Very small phones */
+@media (max-width: 480px){
+  #topbar .actions{
+    gap:6px;
+  }
+  #uploadBtn, #toggleFeedBtn{
+    padding:10px 12px; font-size:13px;
+  }
+  #caption{ width:min(55vw, 220px); padding:10px; }
+  #hint{ font-size:11px; }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *{ scroll-behavior: auto; transition: none !important; }
+}
+
+
+/* Minimap overlay */
+#minimap{
+  position:absolute;
+  right:8px; bottom:8px;
+  width:160px; height:160px;           /* CSS size (backing res set in JS for HiDPI) */
+  border:1px solid #1f2937;
+  background:rgba(11,18,32,0.85);
+  backdrop-filter: blur(2px);
+  border-radius:8px;
+  cursor:crosshair;
+}
+
+/* Larger touch area on phones */
+@media (max-width: 768px){
+  #minimap{ width:140px; height:140px; right:6px; bottom:6px; }
+}
+
+html, body { height: 100%; overflow: hidden; }
+
+/* Backdrop for the feed drawer */
+#feedBackdrop{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.35);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease;
+  z-index: 25;
+}
+
+/* Drawer base (desktop unchanged) */
+#feed{
+  z-index: 30; /* above canvas */
+}
+
+/* Mobile drawer */
+@media (max-width: 768px){
+  /* Keep canvas full height; no page scroll needed */
+  main{
+    display: block;
+    padding: 10px;
+  }
+  #canvasWrap{
+    height: calc(100svh - 72px - env(safe-area-inset-top));
+  }
+
+  /* Turn feed into a bottom sheet */
+  #feed{
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 55svh;                 /* drawer height */
+    max-height: 80svh;
+    background: var(--card);
+    border-top: 1px solid #1f2937;
+    border-radius: 12px 12px 0 0;
+    padding: 10px;
+    overflow: auto;                 /* its own scroll */
+    -webkit-overflow-scrolling: touch;
+    transform: translateY(100%);    /* hidden by default */
+    transition: transform .22s ease;
+  }
+
+  /* Handle/label at top of drawer (optional) */
+  #feed::before{
+    content: "";
+    display: block;
+    width: 44px;
+    height: 4px;
+    background: #25324b;
+    border-radius: 999px;
+    margin: 6px auto 8px auto;
+  }
+
+  /* When open */
+  .feed-open #feed{
+    transform: translateY(0);
+  }
+  .feed-open #feedBackdrop{
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Hide the old “two column” layout */
+  .feed-hidden main { display:block; }
+}

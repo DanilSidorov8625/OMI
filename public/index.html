@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>One Million Images (MVP)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <header id="topbar">
+    <h1>One Million Images</h1>
+    <div class="actions">
+      <button id="uploadBtn">Upload</button>
+      <input type="text" id="caption" placeholder="Caption (optional)" />
+      <input type="file" id="fileInput" accept="image/*" hidden />
+      <button id="toggleFeedBtn" aria-pressed="false" aria-controls="feed">Hide Latest</button>
+      <span id="status"></span>
+    </div>
+  </header>
+  <main>
+    <div id="feedBackdrop" hidden></div>
+    <div id="canvasWrap">
+      <canvas id="board" width="1200" height="900"></canvas>
+      <div id="hint">Drag to pan. Scroll to zoom. Double-click to upload to a specific slot.</div>
+      <canvas id="minimap" width="200" height="200" aria-label="Minimap"></canvas>
+    </div>
+    <aside id="feed">
+      <h3>Latest</h3>
+      <ul id="feedList"></ul>
+    </aside>
+  </main>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
+  <script type="module" src="app.js"></script>
+</body>
+
+</html>
