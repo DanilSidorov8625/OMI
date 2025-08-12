@@ -27,6 +27,7 @@ const io = new Server(server, { cors: { origin: '*' } });
  * MIDDLEWARE (order matters)
  **********************************************************/
 const ORIGIN_ALLOWLIST = [
+
   'http://localhost:8080',
   'https://omnaris.xyz',
 ];
@@ -42,7 +43,7 @@ app.use(helmet({
     directives: {
       "default-src": ["'self'"],
       "img-src": ["'self'", `https://${R2_DOMAIN}`, "data:"],
-      "script-src": ["'self'", "https://cdn.socket.io"],
+      "script-src": ["'self'", "https://cdn.socket.io", "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"],
       "style-src": ["'self'", "'unsafe-inline'"],
       "connect-src": ["'self'", `https://${R2_DOMAIN}`],
       "frame-ancestors": ["'none'"],
@@ -319,18 +320,18 @@ app.post(
 
       const ext = (mime.extension(mimeType) || 'bin').toLowerCase();
       const origKey = `${hash}.orig.${ext}`;
-      const thumbKey = `${hash}.thumb.avif`;
+      const thumbKey = `${hash}.thumb.webp`;
 
       const thumbBuffer = await sharp(req.file.buffer)
         .resize(THUMB_SIZE, THUMB_SIZE, { fit: 'cover' })
-        .avif({ quality: 50 })
+        .webp({ quality: 50 })
         .toBuffer();
 
       let origUrl, thumbUrl;
       try {
         [origUrl, thumbUrl] = await Promise.all([
           putToR2({ key: origKey, bytes: req.file.buffer, contentType: mimeType }),
-          putToR2({ key: thumbKey, bytes: thumbBuffer, contentType: 'image/avif' })
+          putToR2({ key: thumbKey, bytes: thumbBuffer, contentType: 'image/webp' })
         ]);
       } catch (err) {
         await deleteFromR2(origKey);
@@ -421,7 +422,6 @@ server.listen(PORT, () => {
   log('boot', `One Million Images: http://localhost:${PORT}`);
   log('boot', `Grid: ${GRID_W} x ${GRID_H}`);
 });
-
 /**********************************************************
  * GRACEFUL SHUTDOWN (★ NEW)
  **********************************************************/

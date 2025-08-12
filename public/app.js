@@ -222,11 +222,12 @@ Log.init();
 /**********************************************************
  * CORE STATE
  **********************************************************/
+const isMobileConnect = /Mobi|Android/i.test(navigator.userAgent);
 let GRID = { w: 1000, h: 1000, slotSize: 40 }; // until /api/config loads
 let scale = 0.25;                 // zoom level (logical tile → CSS px)
 let origin = { x: 0, y: 0 };      // top-left in grid coords
 let dpr = window.devicePixelRatio || 1; // HiDPI
-const LOD_SWITCH_PX = 160;        // CSS px per tile to switch to original
+const LOD_SWITCH_PX = isMobileConnect ? 300 : 160;        // CSS px per tile to switch to original
 
 let dragging = false;
 let dragStart = { x: 0, y: 0 };
@@ -247,32 +248,37 @@ const Cache = (() => {
   function keyOf(x, y) { return `${x},${y}`; }
 
   function ensureThumb({ key, thumbUrl }) {
-    let e = map.get(key);
-    if (!e) {
-      e = {
-        thumbUrl, fullUrl: null,
-        thumbImg: new Image(), fullImg: null,
-        thumbReady: false, fullReady: false,
-        loadingFull: false, lastUsed: performance.now()
-      };
+  let e = map.get(key);
+
+  if (!e) {
+    e = {
+      thumbUrl, fullUrl: null,
+      thumbImg: new Image(), fullImg: null,
+      thumbReady: false, fullReady: false,
+      loadingFull: false, lastUsed: performance.now()
+    };
+    e.thumbImg.decoding = 'async';
+    if (!isMobileConnect) {
+      e.thumbImg.loading = 'lazy'; // Only for non-mobile
+    }
+    e.thumbImg.onload = () => { e.thumbReady = true; touch(key); requestDraw(); };
+    e.thumbImg.src = thumbUrl;
+    map.set(key, e);
+  } else {
+    if (e.thumbUrl !== thumbUrl) {
+      e.thumbUrl = thumbUrl;
+      e.thumbReady = false;
+      e.thumbImg = new Image();
       e.thumbImg.decoding = 'async';
-      e.thumbImg.loading = 'lazy';
+      if (!isMobileConnect) {
+        e.thumbImg.loading = 'lazy';
+      }
       e.thumbImg.onload = () => { e.thumbReady = true; touch(key); requestDraw(); };
       e.thumbImg.src = thumbUrl;
-      map.set(key, e);
-    } else {
-      if (e.thumbUrl !== thumbUrl) {
-        e.thumbUrl = thumbUrl;
-        e.thumbReady = false;
-        e.thumbImg = new Image();
-        e.thumbImg.decoding = 'async';
-        e.thumbImg.loading = 'lazy';
-        e.thumbImg.onload = () => { e.thumbReady = true; touch(key); requestDraw(); };
-        e.thumbImg.src = thumbUrl;
-      }
-      touch(key);
     }
+    touch(key);
   }
+}
 
   function ensureFull({ key, fullUrl }) {
     const e = map.get(key);
@@ -820,6 +826,99 @@ canvas.addEventListener('wheel', (e) => {
   scale = next;
   requestDraw();
 }, { passive: false });
+
+
+/**********************************************************
+ * MOBILE GESTURES: pinch-to-zoom + two-finger pan
+ **********************************************************/
+canvas.style.touchAction = 'none'; // ensure touch events reach us
+
+let pointers = new Map();   // Map<pointerId, {x,y}>
+let isPinching = false;
+let pinchState = null;      // { startDist, startScale, centerGrid }
+
+function canvasClientToLocal(clientX, clientY) {
+  const r = canvas.getBoundingClientRect();
+  return { x: clientX - r.left, y: clientY - r.top };
+}
+
+function getCentroid() {
+  const pts = [...pointers.values()];
+  return { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+}
+
+function getDistance() {
+  const pts = [...pointers.values()];
+  return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+}
+
+function beginPinch() {
+  isPinching = true;
+  dragging = false; // disable single-finger drag while pinching
+
+  const startDist = getDistance();
+  const centerClient = getCentroid();
+  const { x: cx, y: cy } = canvasClientToLocal(centerClient.x, centerClient.y);
+  const centerGrid = screenToGrid(cx, cy);
+
+  pinchState = {
+    startDist,
+    startScale: scale,
+    centerGrid
+  };
+}
+
+function updatePinch() {
+  if (!isPinching || pointers.size < 2 || !pinchState) return;
+
+  const dist = getDistance();
+  const centerClient = getCentroid();
+  const { x: cx, y: cy } = canvasClientToLocal(centerClient.x, centerClient.y);
+
+  const min = getMinScale();
+  let next = pinchState.startScale * (dist / pinchState.startDist);
+  next = Math.max(min, Math.min(50, next));
+
+  // Keep the pinch center's grid coord anchored under the same screen point.
+  origin.x = pinchState.centerGrid.x - cx / (GRID.slotSize * next);
+  origin.y = pinchState.centerGrid.y - cy / (GRID.slotSize * next);
+
+  scale = next;
+  clampOrigin();
+  requestDraw();
+}
+
+function endPinch() {
+  isPinching = false;
+  pinchState = null;
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch') return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2) beginPinch();
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'touch') return;
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (isPinching) updatePinch();
+});
+
+function removePointer(e) {
+  if (e.pointerType !== 'touch') return;
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2 && isPinching) endPinch();
+}
+canvas.addEventListener('pointerup', removePointer);
+canvas.addEventListener('pointercancel', removePointer);
+
+// If the tab loses focus mid-gesture, tidy up
+window.addEventListener('blur', () => {
+  if (isPinching) endPinch();
+  pointers.clear();
+});
 
 /**********************************************************
  * UPLOADS (random or target slot via dbl-click)
