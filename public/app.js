@@ -1,23 +1,40 @@
 /**********************************************************
- * DOM REFERENCES
+ * DOM REFERENCES - Updated for new HTML structure
  **********************************************************/
-const canvas = document.getElementById('board');
+const canvas = document.getElementById('mainCanvas');
 const ctx = canvas.getContext('2d');
-const uploadBtn = document.getElementById('uploadBtn');
-const fileInput = document.getElementById('fileInput');
-const captionInput = document.getElementById('caption');
-const statusEl = document.getElementById('status');
-const feedList = document.getElementById('feedList');
-const toggleFeedBtn = document.getElementById('toggleFeedBtn');
-const minimap = document.getElementById('minimap');
+const uploadBtn = document.querySelector('.btn-primary'); // Upload button
+const fileInput = document.createElement('input'); // Create file input dynamically
+const captionInput = document.querySelector('.caption-input');
+const statusEl = document.createElement('div'); // Create status element
+const feedList = document.querySelector('.feed-list');
+const toggleFeedBtn = document.getElementById('sidebarToggle');
+const minimap = document.getElementById('minimapCanvas');
 const mmCtx = minimap.getContext('2d');
-const feedBackdrop = document.getElementById('feedBackdrop');
+const feedBackdrop = document.getElementById('sidebarBackdrop');
 
-/**********************************************************
- * LOGGING: CONFIG + TRANSPORT (client → server)
- * - Mirrors console.* and window errors to POST /api/log
- * - Batches logs to reduce chattiness
- **********************************************************/
+// Setup file input
+fileInput.type = 'file';
+fileInput.accept = 'image/*';
+fileInput.style.display = 'none';
+document.body.appendChild(fileInput);
+
+// Setup status element
+statusEl.style.cssText = `
+  position: fixed;
+  top: 100px;
+  right: 20px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #e2e8f0;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  z-index: 1000;
+  display: none;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+`;
+document.body.appendChild(statusEl);
+
 /**********************************************************
  * LOGGING: CONFIG + TRANSPORT (client → server)
  * - Mirrors console.* and window errors to POST /api/log
@@ -218,7 +235,6 @@ const Log = (() => {
 })();
 Log.init();
 
-
 /**********************************************************
  * CORE STATE
  **********************************************************/
@@ -248,37 +264,37 @@ const Cache = (() => {
   function keyOf(x, y) { return `${x},${y}`; }
 
   function ensureThumb({ key, thumbUrl }) {
-  let e = map.get(key);
+    let e = map.get(key);
 
-  if (!e) {
-    e = {
-      thumbUrl, fullUrl: null,
-      thumbImg: new Image(), fullImg: null,
-      thumbReady: false, fullReady: false,
-      loadingFull: false, lastUsed: performance.now()
-    };
-    e.thumbImg.decoding = 'async';
-    if (!isMobileConnect) {
-      e.thumbImg.loading = 'lazy'; // Only for non-mobile
-    }
-    e.thumbImg.onload = () => { e.thumbReady = true; touch(key); requestDraw(); };
-    e.thumbImg.src = thumbUrl;
-    map.set(key, e);
-  } else {
-    if (e.thumbUrl !== thumbUrl) {
-      e.thumbUrl = thumbUrl;
-      e.thumbReady = false;
-      e.thumbImg = new Image();
+    if (!e) {
+      e = {
+        thumbUrl, fullUrl: null,
+        thumbImg: new Image(), fullImg: null,
+        thumbReady: false, fullReady: false,
+        loadingFull: false, lastUsed: performance.now()
+      };
       e.thumbImg.decoding = 'async';
       if (!isMobileConnect) {
-        e.thumbImg.loading = 'lazy';
+        e.thumbImg.loading = 'lazy'; // Only for non-mobile
       }
       e.thumbImg.onload = () => { e.thumbReady = true; touch(key); requestDraw(); };
       e.thumbImg.src = thumbUrl;
+      map.set(key, e);
+    } else {
+      if (e.thumbUrl !== thumbUrl) {
+        e.thumbUrl = thumbUrl;
+        e.thumbReady = false;
+        e.thumbImg = new Image();
+        e.thumbImg.decoding = 'async';
+        if (!isMobileConnect) {
+          e.thumbImg.loading = 'lazy';
+        }
+        e.thumbImg.onload = () => { e.thumbReady = true; touch(key); requestDraw(); };
+        e.thumbImg.src = thumbUrl;
+      }
+      touch(key);
     }
-    touch(key);
   }
-}
 
   function ensureFull({ key, fullUrl }) {
     const e = map.get(key);
@@ -331,17 +347,16 @@ const Cache = (() => {
 /**********************************************************
  * HELPERS
  **********************************************************/
-// Put near your other globals/utilities
 function getMinScale() {
   const widthScale = (canvas.width / dpr) / (GRID.w * GRID.slotSize);
   const heightScale = (canvas.height / dpr) / (GRID.h * GRID.slotSize);
-  // Must be >= the larger axis so the viewport never exceeds the grid on either axis
   return Math.max(widthScale, heightScale);
 }
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+
 function snapPx(pxCss) { return Math.round(pxCss * dpr) / dpr; }
 
 function clampOrigin() {
@@ -371,8 +386,8 @@ function goToTile(gx, gy) {
 
 function animateToTile(gx, gy, ms = 300, targetScale = 1) {
   const startScale = scale;
-  const minScale = getMinScale();                 // <-- add
-  targetScale = Math.max(targetScale, minScale);  // <-- clamp floor
+  const minScale = getMinScale();
+  targetScale = Math.max(targetScale, minScale);
 
   const start = computeTargetOrigin(gx, gy, startScale);
   const end = computeTargetOrigin(gx, gy, targetScale);
@@ -400,7 +415,7 @@ function animateToTile(gx, gy, ms = 300, targetScale = 1) {
 function setHighlight(x, y, ms = 2000) {
   highlightTile = { x, y };
   if (highlightTimer) clearTimeout(highlightTimer);
-  highlightTimer = setTimeout(() => { highlightTile = null; }, ms);
+  highlightTimer = setTimeout(() => { highlightTile = null; requestDraw(); }, ms);
 }
 
 /**********************************************************
@@ -415,18 +430,9 @@ function resizeMinimap() {
 }
 
 function resize() {
-  document.documentElement.style.overflow = 'hidden';
-  document.body.style.overflow = 'hidden';
-
-  const wrap = document.getElementById('canvasWrap');
-  const topbar = document.getElementById('topbar');
-  const bottomPad = 50;
-
-  const availH = Math.max(0, window.innerHeight - (topbar?.offsetHeight || 0) - bottomPad);
-  wrap.style.height = availH + 'px';
-
-  const w = wrap.clientWidth;
-  const h = wrap.clientHeight;
+  const canvasContainer = document.querySelector('.canvas-container');
+  const w = canvasContainer.clientWidth;
+  const h = canvasContainer.clientHeight;
 
   dpr = window.devicePixelRatio || 1;
   canvas.width = Math.floor(w * dpr);
@@ -439,8 +445,94 @@ function resize() {
   resizeMinimap();
   requestDraw();
 }
+
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', resize);
+
+/**********************************************************
+ * SIDEBAR TOGGLE FUNCTIONALITY
+ **********************************************************/
+const sidebarToggle = document.getElementById('sidebarToggle');
+const mobileHeaderToggle = document.getElementById('mobileHeaderToggle');
+const sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
+const sidebar = document.getElementById('sidebar');
+const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+const main = document.querySelector('.main');
+let sidebarOpen = true;
+
+function isMobile() {
+  return window.innerWidth <= 768;
+}
+
+function updateToggleText() {
+  if (isMobile()) {
+    mobileHeaderToggle.innerHTML = sidebarOpen ? '👁️' : '👀';
+  } else {
+    sidebarToggle.innerHTML = sidebarOpen ? '👁️ Hide Sidebar' : '👀 Show Sidebar';
+  }
+}
+
+function applySidebarState() {
+  if (isMobile()) {
+    // Mobile behavior
+    main.classList.remove('sidebar-hidden');
+    if (sidebarOpen) {
+      sidebar.classList.add('open');
+      sidebarBackdrop.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    } else {
+      sidebar.classList.remove('open');
+      sidebarBackdrop.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+  } else {
+    // Desktop behavior
+    sidebar.classList.remove('open');
+    sidebarBackdrop.classList.remove('active');
+    document.body.style.overflow = '';
+    if (sidebarOpen) {
+      main.classList.remove('sidebar-hidden');
+    } else {
+      main.classList.add('sidebar-hidden');
+    }
+  }
+}
+
+function toggleSidebar() {
+  sidebarOpen = !sidebarOpen;
+  applySidebarState();
+  updateToggleText();
+}
+
+// Event listeners for sidebar toggle
+sidebarToggle.addEventListener('click', toggleSidebar);
+mobileHeaderToggle.addEventListener('click', toggleSidebar);
+sidebarCloseBtn.addEventListener('click', toggleSidebar);
+
+sidebarBackdrop.addEventListener('click', () => {
+  if (isMobile() && sidebarOpen) {
+    toggleSidebar();
+  }
+});
+
+// Handle window resize with proper state management
+let resizeTimeout;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    resize();
+    applySidebarState();
+    updateToggleText();
+  }, 150);
+});
+
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => {
+    resize();
+    applySidebarState();
+    updateToggleText();
+  }, 100);
+});
 
 /**********************************************************
  * ON-DEMAND FULL IMAGE FETCH (for a given visible tile)
@@ -492,10 +584,9 @@ function drawMinimap() {
     mmCtx.beginPath(); mmCtx.moveTo(offX, y); mmCtx.lineTo(offX + GRID.w * s, y); mmCtx.stroke();
   }
 
-  // --- plot occupied tiles from cache ---
-  // draw tiny 1x1 (or s-sized) rects for any tile with an image loaded
+  // plot occupied tiles from cache
   mmCtx.fillStyle = 'rgba(255,255,255,0.75)';
-  const PLOT_CAP = 25000; // simple throttle for very large caches
+  const PLOT_CAP = 25000;
   let plotted = 0;
   const dotW = Math.max(1, Math.floor(s));
   const dotH = Math.max(1, Math.floor(s));
@@ -636,9 +727,9 @@ function requestDraw() {
  * VIEWPORT FETCH (thumbs) — resilient + 429 backoff
  **********************************************************/
 let fetchTimer = null;
-let rateBackoffMs = 0;         // grows on 429, reset on success
-const BASE_DELAY_MS = 120;     // your existing delay
-const MAX_BACKOFF_MS = 5000;   // cap the backoff
+let rateBackoffMs = 0;
+const BASE_DELAY_MS = 120;
+const MAX_BACKOFF_MS = 5000;
 
 function scheduleFetch(extraDelay = 0) {
   clearTimeout(fetchTimer);
@@ -656,7 +747,6 @@ async function fetchViewport() {
     const x1 = Math.min(GRID.w - 1, x0 + cols);
     const y1 = Math.min(GRID.h - 1, y0 + rows);
 
-    // small prefetch halo
     const PREFETCH = 12;
     const px0 = Math.max(0, x0 - PREFETCH);
     const py0 = Math.max(0, y0 - PREFETCH);
@@ -666,23 +756,19 @@ async function fetchViewport() {
     const url = `/api/grid?x0=${px0}&y0=${py0}&x1=${px1}&y1=${py1}`;
     const res = await fetch(url);
 
-    // Handle rate limiting & HTTP errors gracefully
     if (!res.ok) {
       if (res.status === 429) {
-        // exponential-ish backoff
         rateBackoffMs = Math.min(MAX_BACKOFF_MS, Math.max(250, rateBackoffMs * 2 || 250));
         console.warn('grid fetch rate-limited (429). Backing off', rateBackoffMs, 'ms');
-        scheduleFetch();   // try again later
+        scheduleFetch();
         return;
       } else {
         console.warn('grid fetch failed:', res.status);
-        // small nudge, but don’t spiral
         scheduleFetch(300);
         return;
       }
     }
 
-    // Try to parse JSON safely
     let data;
     try {
       data = await res.json();
@@ -693,11 +779,9 @@ async function fetchViewport() {
     }
 
     const rowsArr = (data && Array.isArray(data.rows)) ? data.rows : [];
-    // Defensive: if server responded without rows, just stop here
     if (rowsArr.length === 0) {
-      // success -> reset backoff
       rateBackoffMs = 0;
-      requestDraw();  // still redraw to keep UI snappy
+      requestDraw();
       return;
     }
 
@@ -706,67 +790,48 @@ async function fetchViewport() {
       Cache.ensureThumb({ key, thumbUrl: row.thumbUrl });
     });
 
-    // success -> reset backoff
     rateBackoffMs = 0;
-
     Cache.evictIfNeeded([x0, y0, x1, y1]);
     requestDraw();
   } catch (err) {
-    // Network / unexpected errors
     console.error('fetchViewport error:', err);
-    // brief retry but don’t explode
     scheduleFetch(500);
   }
 }
 
 /**********************************************************
- * FEED UI
+ * FEED UI - Updated for new HTML structure
  **********************************************************/
 function prependFeed(row) {
   const li = document.createElement('li');
+  li.className = 'feed-item';
   li.dataset.x = row.x;
   li.dataset.y = row.y;
   li.setAttribute('role', 'button');
   li.tabIndex = 0;
   li.style.cursor = 'pointer';
+  
   li.innerHTML = `
-    <img src="${row.thumbUrl}" alt="thumb"/>
-    <div>
-      <div class="caption">${escapeHtml(row.caption || '(no caption)')}</div>
-      <div class="coords">(${row.x}, ${row.y}) · ${new Date(row.createdAt).toLocaleString()}</div>
+    <div class="placeholder-img">
+      <img src="${row.thumbUrl}" alt="thumb" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;"/>
+    </div>
+    <div class="feed-item-content">
+      <div class="feed-item-coords">(${row.x}, ${row.y})</div>
+      <div class="feed-item-caption">${escapeHtml(row.caption || 'No caption')}</div>
     </div>
   `;
+  
   feedList.prepend(li);
   while (feedList.children.length > 50) feedList.removeChild(feedList.lastChild);
 }
 
-function openFeedDrawer() {
-  document.body.classList.add('feed-open');
-  toggleFeedBtn.textContent = 'Hide Latest';
-  toggleFeedBtn.setAttribute('aria-pressed', 'true');
+function isMobile2() { 
+  return window.matchMedia('(max-width: 768px)').matches; 
 }
-function closeFeedDrawer() {
-  document.body.classList.remove('feed-open');
-  toggleFeedBtn.textContent = 'Show Latest';
-  toggleFeedBtn.setAttribute('aria-pressed', 'false');
-}
-function isMobile() { return window.matchMedia('(max-width: 768px)').matches; }
 
-toggleFeedBtn.addEventListener('click', () => {
-  if (isMobile()) {
-    document.body.classList.contains('feed-open') ? closeFeedDrawer() : openFeedDrawer();
-    return;
-  }
-  document.body.classList.toggle('feed-hidden');
-  const hidden = document.body.classList.contains('feed-hidden');
-  toggleFeedBtn.textContent = hidden ? 'Show Latest' : 'Hide Latest';
-  toggleFeedBtn.setAttribute('aria-pressed', String(!hidden));
-  resize();
-});
-feedBackdrop.addEventListener('click', closeFeedDrawer);
-
+// Feed interaction - updated for new sidebar structure
 feedList.addEventListener('click', (e) => {
-  const li = e.target.closest('li');
+  const li = e.target.closest('.feed-item');
   if (!li) return;
   const gx = Number(li.dataset.x);
   const gy = Number(li.dataset.y);
@@ -774,7 +839,13 @@ feedList.addEventListener('click', (e) => {
 
   animateToTile(gx, gy, 500, 5);
   setHighlight(gx, gy, 2000);
-  if (document.body.classList.contains('feed-open')) closeFeedDrawer();
+  
+  // Close sidebar on mobile after navigation
+  if (isMobile2()) {
+    if (sidebarOpen) {
+      toggleSidebar();
+    }
+  }
 });
 
 /**********************************************************
@@ -787,11 +858,13 @@ canvas.addEventListener('pointerdown', (e) => {
   dragStart = { x: e.clientX, y: e.clientY };
   originStart = { ...origin };
 });
+
 canvas.addEventListener('pointerup', (e) => {
   canvas.releasePointerCapture(e.pointerId);
   dragging = false;
   canvas.style.cursor = 'crosshair';
 });
+
 canvas.addEventListener('pointermove', (e) => {
   if (!dragging) return;
   const dx = e.clientX - dragStart.x;
@@ -802,6 +875,7 @@ canvas.addEventListener('pointermove', (e) => {
   clampOrigin();
   requestDraw();
 });
+
 canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 
 /**********************************************************
@@ -811,13 +885,12 @@ canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
 
   const factor = e.deltaY < 0 ? 1.1 : 0.9;
-
-  const minScale = getMinScale();               // <-- changed
+  const minScale = getMinScale();
   const mouseGX = origin.x + e.offsetX / (GRID.slotSize * scale);
   const mouseGY = origin.y + e.offsetY / (GRID.slotSize * scale);
 
   let next = scale * factor;
-  next = Math.max(minScale, Math.min(50, next)); // <-- clamp against new floor
+  next = Math.max(minScale, Math.min(50, next));
 
   origin.x = mouseGX - e.offsetX / (GRID.slotSize * next);
   origin.y = mouseGY - e.offsetY / (GRID.slotSize * next);
@@ -827,15 +900,14 @@ canvas.addEventListener('wheel', (e) => {
   requestDraw();
 }, { passive: false });
 
-
 /**********************************************************
  * MOBILE GESTURES: pinch-to-zoom + two-finger pan
  **********************************************************/
-canvas.style.touchAction = 'none'; // ensure touch events reach us
+canvas.style.touchAction = 'none';
 
-let pointers = new Map();   // Map<pointerId, {x,y}>
+let pointers = new Map();
 let isPinching = false;
-let pinchState = null;      // { startDist, startScale, centerGrid }
+let pinchState = null;
 
 function canvasClientToLocal(clientX, clientY) {
   const r = canvas.getBoundingClientRect();
@@ -854,7 +926,7 @@ function getDistance() {
 
 function beginPinch() {
   isPinching = true;
-  dragging = false; // disable single-finger drag while pinching
+  dragging = false;
 
   const startDist = getDistance();
   const centerClient = getCentroid();
@@ -879,7 +951,6 @@ function updatePinch() {
   let next = pinchState.startScale * (dist / pinchState.startDist);
   next = Math.max(min, Math.min(50, next));
 
-  // Keep the pinch center's grid coord anchored under the same screen point.
   origin.x = pinchState.centerGrid.x - cx / (GRID.slotSize * next);
   origin.y = pinchState.centerGrid.y - cy / (GRID.slotSize * next);
 
@@ -911,10 +982,10 @@ function removePointer(e) {
   pointers.delete(e.pointerId);
   if (pointers.size < 2 && isPinching) endPinch();
 }
+
 canvas.addEventListener('pointerup', removePointer);
 canvas.addEventListener('pointercancel', removePointer);
 
-// If the tab loses focus mid-gesture, tidy up
 window.addEventListener('blur', () => {
   if (isPinching) endPinch();
   pointers.clear();
@@ -928,6 +999,16 @@ uploadBtn.addEventListener('click', () => {
   fileInput.value = '';
   fileInput.click();
 });
+
+// Also handle mobile upload button
+const mobileUploadBtn = document.querySelector('.sidebar-mobile-controls .btn-primary');
+if (mobileUploadBtn) {
+  mobileUploadBtn.addEventListener('click', () => {
+    pendingSlot = null;
+    fileInput.value = '';
+    fileInput.click();
+  });
+}
 
 function screenToGrid(px, py) {
   return {
@@ -954,16 +1035,19 @@ canvas.addEventListener('dblclick', async (e) => {
     const res = await fetch(`/api/slots?x0=${x}&y0=${y}`);
     if (!res.ok) {
       if (res.status === 429) {
-        alert('You’re doing that a bit fast—please wait a moment and try again.');
+        showStatus('You\'re doing that a bit fast—please wait a moment and try again.');
         return;
       }
       console.warn('slots lookup failed:', res.status);
-      alert('Could not verify slot. Please try again.');
+      showStatus('Could not verify slot. Please try again.');
       return;
     }
     const data = await res.json();
     const taken = Array.isArray(data.rows) ? data.rows.length > 0 : !!data.rows;
-    if (taken) { alert(`Slot (${x}, ${y}) is already taken`); return; }
+    if (taken) { 
+      showStatus(`Slot (${x}, ${y}) is already taken`); 
+      return; 
+    }
 
     if (!confirm(`Upload to slot (${x}, ${y})?`)) return;
     pendingSlot = { x, y };
@@ -971,9 +1055,17 @@ canvas.addEventListener('dblclick', async (e) => {
     fileInput.click();
   } catch (err) {
     console.error('dblclick handler error:', err);
-    alert('Something went wrong. Please try again.');
+    showStatus('Something went wrong. Please try again.');
   }
 });
+
+function showStatus(message, duration = 2500) {
+  statusEl.textContent = message;
+  statusEl.style.display = 'block';
+  setTimeout(() => {
+    statusEl.style.display = 'none';
+  }, duration);
+}
 
 fileInput.addEventListener('change', async () => {
   if (!fileInput.files.length) return;
@@ -981,26 +1073,36 @@ fileInput.addEventListener('change', async () => {
 
   const fd = new FormData();
   fd.append('image', file);
-  if (captionInput.value) fd.append('caption', captionInput.value);
+  
+  // Get caption from either input
+  const desktopCaption = document.querySelector('.header-controls .caption-input');
+  const mobileCaption = document.querySelector('.sidebar-mobile-controls .caption-input');
+  const caption = (desktopCaption?.value || mobileCaption?.value || '').trim();
+  
+  if (caption) fd.append('caption', caption);
   if (pendingSlot) {
     fd.append('x', String(pendingSlot.x));
     fd.append('y', String(pendingSlot.y));
   }
 
   try {
-    statusEl.textContent = 'Uploading…';
+    showStatus('Uploading…');
     const res = await fetch('/api/upload', { method: 'POST', body: fd });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Upload failed');
 
-    statusEl.textContent = `Uploaded to (${data.slot.x}, ${data.slot.y})`;
+    showStatus(`Uploaded to (${data.slot.x}, ${data.slot.y})`);
     animateToTile(data.slot.x, data.slot.y, 500, 5);
     setHighlight(data.slot.x, data.slot.y, 2000);
+    
+    // Clear caption inputs
+    if (desktopCaption) desktopCaption.value = '';
+    if (mobileCaption) mobileCaption.value = '';
+    
   } catch (err) {
-    statusEl.textContent = 'Error: ' + err.message;
+    showStatus('Error: ' + err.message);
   } finally {
     pendingSlot = null;
-    setTimeout(() => (statusEl.textContent = ''), 2500);
   }
 });
 
@@ -1008,50 +1110,78 @@ fileInput.addEventListener('change', async () => {
  * DATA FETCH
  **********************************************************/
 async function loadFeed() {
-  const res = await fetch('/api/feed?limit=50');
-  const data = await res.json();
-  feedList.innerHTML = '';
-  data.rows.forEach(prependFeed);
+  try {
+    const res = await fetch('/api/feed?limit=50');
+    const data = await res.json();
+    feedList.innerHTML = '';
+    data.rows.forEach(prependFeed);
+  } catch (err) {
+    console.error('Failed to load feed:', err);
+  }
 }
 
 async function fetchConfig() {
-  const res = await fetch('/api/config');
-  GRID = (await res.json()).grid;
-  loadFeed();
+  try {
+    const res = await fetch('/api/config');
+    GRID = (await res.json()).grid;
+    loadFeed();
+  } catch (err) {
+    console.error('Failed to fetch config:', err);
+    // Use default GRID values if config fails
+    loadFeed();
+  }
 }
 
 /**********************************************************
- * SOCKETS
+ * SOCKETS - Updated for new structure
  **********************************************************/
-const socket = io();
-socket.on('connect', () => console.log('socket connected', socket.id));
-socket.on('connect_error', (err) => console.error('socket connect_error', err));
+let socket;
+try {
+  socket = io();
+  socket.on('connect', () => console.log('socket connected', socket.id));
+  socket.on('connect_error', (err) => console.error('socket connect_error', err));
 
-socket.on('new_image', (row) => {
-  if (!row?.thumbUrl) return;
-  const key = Cache.keyOf(row.x, row.y);
+  socket.on('new_image', (row) => {
+    if (!row?.thumbUrl) return;
+    const key = Cache.keyOf(row.x, row.y);
 
-  Cache.ensureThumb({ key, thumbUrl: row.thumbUrl });
-  Cache.ensureFull({ key, fullUrl: row.originalUrl || row.thumbUrl });
+    Cache.ensureThumb({ key, thumbUrl: row.thumbUrl });
+    Cache.ensureFull({ key, fullUrl: row.originalUrl || row.thumbUrl });
 
-  prependFeed({
-    x: row.x,
-    y: row.y,
-    caption: row.caption,
-    createdAt: row.createdAt,
-    thumbUrl: row.thumbUrl,
-    originalUrl: row.originalUrl || row.thumbUrl
+    prependFeed({
+      x: row.x,
+      y: row.y,
+      caption: row.caption,
+      createdAt: row.createdAt,
+      thumbUrl: row.thumbUrl,
+      originalUrl: row.originalUrl || row.thumbUrl
+    });
+
+    requestDraw();
   });
-
-  requestDraw();
-});
+} catch (err) {
+  console.warn('Socket.io not available:', err);
+}
 
 /**********************************************************
  * INIT
  **********************************************************/
 canvas.style.cursor = 'crosshair';
 
+// Initialize
 fetchConfig().then(() => {
   resize();
+  applySidebarState();
+  updateToggleText();
   requestDraw();
+});
+
+// Handle window load to ensure everything is ready
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    resize();
+    applySidebarState();
+    updateToggleText();
+    requestDraw();
+  }, 100);
 });
