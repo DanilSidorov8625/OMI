@@ -36,23 +36,28 @@ const R2_DOMAIN = new URL(process.env.R2_CUSTOM_DOMAIN).host;
 
 app.set('trust proxy', 1); // needed so req.ip honors X-Forwarded-For
 
-app.use(helmet({
-  crossOriginEmbedderPolicy: false, // we draw cross-origin images on canvas
-  contentSecurityPolicy: {
-    useDefaults: true,
-    directives: {
-      "default-src": ["'self'"],
-      "img-src": ["'self'", `https://${R2_DOMAIN}`, "data:"],
-      "script-src": ["'self'", "https://cdn.socket.io", "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"],
-      "style-src": ["'self'", "'unsafe-inline'"],
-      "connect-src": ["'self'", `https://${R2_DOMAIN}`],
-      "frame-ancestors": ["'none'"],
-      "object-src": ["'none'"],
-      "upgrade-insecure-requests": [],
-    }
-  },
-  referrerPolicy: { policy: "strict-origin-when-cross-origin" }
-}));
+// app.use(helmet({
+//   crossOriginEmbedderPolicy: false, // we draw cross-origin images on canvas
+//   contentSecurityPolicy: {
+//     useDefaults: true,
+//     directives: {
+//       "default-src": ["'self'"],
+//       "img-src": ["'self'", `https://${R2_DOMAIN}`, "data:"],
+//       "script-src": ["'self'", "https://cdn.socket.io"],
+//       "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+//       "connect-src": ["'self'", `https://${R2_DOMAIN}`],
+//       "font-src": [
+//         "'self'",
+//         "https://fonts.gstatic.com",
+//         "data:"
+//       ],
+//       "frame-ancestors": ["'none'"],
+//       "object-src": ["'none'"],
+//       "upgrade-insecure-requests": [],
+//     }
+//   },
+//   referrerPolicy: { policy: "strict-origin-when-cross-origin" }
+// }));
 
 app.use(cors({ origin: ORIGIN_ALLOWLIST, credentials: false }));
 

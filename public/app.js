@@ -270,7 +270,7 @@ const Cache = (() => {
       e.thumbReady = false;
       e.thumbImg = new Image();
       e.thumbImg.decoding = 'async';
-      if (!isMobileConnect) {
+      if (!isMobile) {
         e.thumbImg.loading = 'lazy';
       }
       e.thumbImg.onload = () => { e.thumbReady = true; touch(key); requestDraw(); };
