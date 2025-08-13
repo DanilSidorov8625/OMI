@@ -4,234 +4,90 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>One Million Images (MVP)</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  <style>
-    /* Custom styles for specific elements that need precise control */
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      padding-left: env(safe-area-inset-left);
-      padding-right: env(safe-area-inset-right);
-    }
-
-    #topbar {
-      padding-top: calc(10px + env(safe-area-inset-top));
-    }
-
-    #board {
-      background: radial-gradient(ellipse at center, #0d1628 0%, #0a0f1c 100%);
-    }
-    
-    #minimap {
-      cursor: crosshair;
-      backdrop-filter: blur(2px);
-    }
-    
-    /* Mobile drawer handle */
-    #feed::before {
-      content: "";
-      display: none;
-      width: 44px;
-      height: 4px;
-      background: #25324b;
-      border-radius: 999px;
-      margin: 6px auto 8px auto;
-    }
-
-    /* Desktop layout */
-    main {
-      display: grid;
-      grid-template-columns: 1fr 320px;
-      gap: 12px;
-      padding: 12px;
-      height: calc(100vh - 91px - env(safe-area-inset-top));
-    }
-
-    #canvasWrap {
-      height: 100%;
-    }
-
-    #feed {
-      height: 100%;
-      overflow-y: auto;
-    }
-    
-    /* Mobile drawer animations and layout */
-    @media (max-width: 768px) {
-      main {
-        display: block;
-        padding: 10px;
-        height: calc(100vh - 80px - env(safe-area-inset-top));
-      }
-
-      #canvasWrap {
-        height: 100%;
-      }
-
-      #feed::before {
-        display: block;
-      }
-
-      #feed {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        height: 55vh;
-        max-height: 55vh;
-        border-top: 1px solid #374151;
-        border-left: 0;
-        border-right: 0;
-        border-bottom: 0;
-        border-radius: 12px 12px 0 0;
-        transform: translateY(100%);
-        transition: transform 0.22s ease;
-        z-index: 30;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-      }
-      
-      .feed-open #feed {
-        transform: translateY(0);
-      }
-      
-      #feedBackdrop {
-        transition: opacity 0.18s ease;
-      }
-      
-      .feed-open #feedBackdrop {
-        opacity: 1 !important;
-        pointer-events: auto !important;
-      }
-
-      #hint {
-        display: none;
-      }
-    }
-
-    /* Hide feed mode */
-    .feed-hidden main {
-      grid-template-columns: 1fr !important;
-    }
-    
-    .feed-hidden #feed {
-      display: none !important;
-    }
-
-    /* Medium screens */
-    @media (max-width: 1024px) and (min-width: 769px) {
-      main {
-        grid-template-columns: 1fr 280px;
-      }
-    }
-
-    /* Small phones */
-    @media (max-width: 480px) {
-      #caption {
-        width: min(55vw, 220px);
-      }
-    }
-  </style>
+  <title>One Million Images - Enhanced Mobile & Desktop Experience</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 
-<body class="bg-slate-950 text-slate-200 font-sans text-sm leading-relaxed overflow-hidden">
-  
-  <!-- Top bar -->
-  <header id="topbar" class="sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-2.5 bg-slate-900 border-b border-gray-700">
-    <h1 class="m-0 text-lg font-medium tracking-wide">One Million Images</h1>
-    <div class="flex gap-2 items-center flex-wrap">
-      <button id="uploadBtn" class="min-h-11 min-w-11 px-3.5 py-2.5 bg-blue-600 text-white border-none rounded-lg text-sm cursor-pointer hover:opacity-90">Upload</button>
-      <input type="text" id="caption" placeholder="Caption (optional)" class="bg-slate-800 border border-gray-600 text-slate-200 px-3 py-2.5 rounded-lg w-60 md:w-52 lg:w-60 min-h-11" />
+<body>
+  <!-- Header -->
+  <header class="header" id="topbar">
+    <div class="brand">
+      <div class="brand-icon"></div>
+      <h1>One Million Images</h1>
+    </div>
+    <div class="header-controls">
+      <button class="btn btn-primary" id="uploadBtn">
+        📤 Upload
+      </button>
+      <input type="text" class="caption-input" id="caption" placeholder="Add a caption...">
       <input type="file" id="fileInput" accept="image/*" hidden />
-      <button id="toggleFeedBtn" aria-pressed="false" aria-controls="feed" class="min-h-11 min-w-11 px-3.5 py-2.5 bg-slate-800 border border-gray-600 text-slate-200 rounded-lg text-sm cursor-pointer aria-pressed:bg-slate-700">Hide Latest</button>
+      <button class="btn btn-secondary" id="toggleFeedBtn">
+        👁️ Hide Sidebar
+      </button>
       <span id="status" class="text-gray-500 text-xs"></span>
     </div>
+    <button class="btn btn-secondary btn-icon mobile-header-toggle" id="mobileHeaderToggle">
+      👀
+    </button>
   </header>
 
-  <main>
-    
-    <!-- Backdrop for mobile drawer -->
-    <div id="feedBackdrop" class="fixed inset-0 bg-black/35 opacity-0 pointer-events-none z-25 md:hidden backdrop-blur-sm" hidden></div>
-    
-    <!-- Canvas section -->
-    <div id="canvasWrap" class="relative bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+  <!-- Sidebar Backdrop (Mobile) -->
+  <div class="sidebar-backdrop" id="feedBackdrop"></div>
+
+  <!-- Main Content -->
+  <main class="main">
+    <!-- Canvas Container -->
+    <div class="canvas-container" id="canvasWrap">
       <canvas id="board" width="900" height="900" class="w-full h-full block"></canvas>
       <div id="hint" class="absolute left-2 bottom-2 text-gray-400 text-xs bg-black/30 px-1.5 py-1 rounded-md">
         Drag to pan. Scroll to zoom. Double-click to upload to a specific slot.
       </div>
     </div>
 
-    <!-- Feed sidebar/drawer -->
-    <aside id="feed" class="bg-gray-800 border border-gray-700 rounded-xl p-2.5">
-      
-      <!-- Instructions -->
-      <div class="mb-4 p-3 bg-slate-800 border border-gray-600 rounded-lg">
-        <h4 class="text-sm font-medium text-slate-300 mb-2">Instructions</h4>
-        <p class="text-xs text-gray-400 leading-relaxed">
-          Drag to pan around the canvas. Scroll to zoom in/out. Double-click any empty slot to upload an image directly to that position. Use the minimap below to navigate quickly.
-        </p>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <!-- Mobile Header -->
+      <div class="sidebar-mobile-header">
+        <div class="brand">
+          <div class="brand-icon"></div>
+          <h2 style="font-size: 18px; font-weight: 600; color: #f8fafc;">One Million Images</h2>
+        </div>
+        <button class="btn btn-secondary btn-icon" id="sidebarCloseBtn">
+          ✕
+        </button>
       </div>
 
-      <!-- Minimap -->
-      <div class="mb-4">
-        <h4 class="text-sm font-medium text-slate-300 mb-2">Navigation</h4>
-        <canvas id="minimap" aria-label="Minimap" class="w-100 h-100 md:w-36 md:h-36 border border-gray-700 bg-slate-900/85 rounded-lg"></canvas>
-      </div>
+      <!-- Mobile Controls -->
+      <section class="sidebar-mobile-controls">
+        <button class="btn btn-primary" id="mobileUploadBtn">
+          📤 Upload
+        </button>
+        <input type="text" class="caption-input" id="mobileCaption" placeholder="Add a caption...">
+      </section>
 
-      <!-- Latest images feed -->
-      <h3 class="m-0 mb-2 text-sm text-slate-300">Latest</h3>
-      <ul id="feedList" class="list-none p-0 m-0 space-y-2">
-        <!-- Feed items will be populated by JavaScript -->
-      </ul>
+      <!-- Instructions Section -->
+      <section class="sidebar-section">
+        <h3>Instructions</h3>
+        <div class="instructions">
+          <p>Drag to pan around the canvas. Scroll to zoom in/out. Double-click any empty slot to upload an image directly to that position. Use the minimap below to navigate quickly around the million image grid.</p>
+        </div>
+      </section>
+
+      <!-- Navigation Section -->
+      <section class="sidebar-section">
+        <h3>Navigation</h3>
+        <canvas id="minimap" aria-label="Minimap" class="minimap"></canvas>
+      </section>
+
+      <!-- Latest Images Section -->
+      <section class="sidebar-section">
+        <h3>Latest Images</h3>
+        <ul class="feed-list" id="feedList">
+          <!-- Feed items will be populated by JavaScript -->
+        </ul>
+      </section>
     </aside>
   </main>
-
-  <!-- Feed items styling -->
-  <style>
-    #feedList li {
-      display: inline-flex;
-      gap: 8px;
-      align-items: center;
-      background: #1e293b;
-      border: 1px solid #374151;
-      padding: 8px;
-      border-radius: 8px;
-    }
-    
-    #feedList img {
-      width: 48px;
-      height: 48px;
-      object-fit: cover;
-      border-radius: 8px;
-      border: 1px solid #374151;
-    }
-
-    @media (max-width: 768px) {
-      #feedList img {
-        width: 56px;
-        height: 56px;
-      }
-      
-      #feedList li {
-        padding: 10px;
-      }
-    }
-    
-    .coords {
-      color: #9ca3af;
-      font-size: 12px;
-    }
-    
-    .caption {
-      color: #e5e7eb;
-      font-size: 12px;
-    }
-  </style>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
   <script type="module" src="app.js"></script>

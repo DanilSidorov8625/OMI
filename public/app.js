@@ -13,6 +13,16 @@ const minimap = document.getElementById('minimap');
 const mmCtx = minimap.getContext('2d');
 const feedBackdrop = document.getElementById('feedBackdrop');
 
+// New UI elements
+const sidebar = document.getElementById('sidebar');
+const sidebarToggle = document.getElementById('toggleFeedBtn'); // same as toggleFeedBtn
+const mobileHeaderToggle = document.getElementById('mobileHeaderToggle');
+const sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
+const main = document.querySelector('.main');
+const mobileUploadBtn = document.getElementById('mobileUploadBtn');
+const mobileCaptionInput = document.getElementById('mobileCaption');
+const wrap = document.getElementById('canvasWrap');
+
 /**********************************************************
  * LOGGING: CONFIG + TRANSPORT (client → server)
  * - Mirrors console.* and window errors to POST /api/log
@@ -238,6 +248,9 @@ let highlightTimer = null;  // timeout id
 
 let pendingSlot = null;     // { x, y } when user dbl-click targets a slot
 
+const GRID_LINE_VISIBILITY_THRESHOLD = 0.1
+
+
 /**********************************************************
  * SMALL IMAGE CACHE (shared by fetch + sockets)
  **********************************************************/
@@ -406,6 +419,57 @@ function setHighlight(x, y, ms = 2000) {
 /**********************************************************
  * LAYOUT / RESIZE
  **********************************************************/
+let sidebarOpen = true;
+
+function isMobile() {
+  return window.matchMedia('(max-width: 768px)').matches;
+}
+
+function updateToggleText() {
+  if (isMobile()) {
+    mobileHeaderToggle.innerHTML = sidebarOpen ? '👁️' : '👀';
+  } else {
+    toggleFeedBtn.innerHTML = sidebarOpen ? '👁️ Hide Sidebar' : '👀 Show Sidebar';
+  }
+}
+
+function applySidebarState() {
+  if (isMobile()) {
+    // Mobile behavior
+    main.classList.remove('sidebar-hidden');
+    if (sidebarOpen) {
+      sidebar.classList.add('open');
+      feedBackdrop.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    } else {
+      sidebar.classList.remove('open');
+      feedBackdrop.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+  } else {
+    // Desktop behavior
+    sidebar.classList.remove('open');
+    feedBackdrop.classList.remove('active');
+    document.body.style.overflow = '';
+    if (sidebarOpen) {
+      main.classList.remove('sidebar-hidden');
+    } else {
+      main.classList.add('sidebar-hidden');
+    }
+  }
+}
+
+function toggleSidebar() {
+  sidebarOpen = !sidebarOpen;
+  applySidebarState();
+  updateToggleText();
+
+  // Recompute canvas size immediately and after layout/transition settles
+  resize();
+  requestAnimationFrame(resize);
+  setTimeout(resize, 350); // matches your CSS transition timing on the sidebar
+}
+
 function resizeMinimap() {
   const r = minimap.getBoundingClientRect();
   const d = window.devicePixelRatio || 1;
@@ -415,14 +479,11 @@ function resizeMinimap() {
 }
 
 function resize() {
-  document.documentElement.style.overflow = 'hidden';
-  document.body.style.overflow = 'hidden';
-
   const wrap = document.getElementById('canvasWrap');
   const topbar = document.getElementById('topbar');
-  const bottomPad = 50;
+  const bottomPad = 0; // No bottom padding needed with new design
 
-  const availH = Math.max(0, window.innerHeight - (topbar?.offsetHeight || 0) - bottomPad);
+  const availH = Math.max(0, window.innerHeight - (topbar?.offsetHeight || 80) - bottomPad);
   wrap.style.height = availH + 'px';
 
   const w = wrap.clientWidth;
@@ -437,10 +498,28 @@ function resize() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   clampOrigin();
   resizeMinimap();
+  applySidebarState();
   requestDraw();
 }
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', resize);
+
+// Handle window resize with proper state management for sidebar
+let resizeTimeout;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    applySidebarState();
+    updateToggleText();
+  }, 150);
+});
+
+const ro = new ResizeObserver(() => {
+  // When #canvasWrap width/height changes because the sidebar is hidden/shown,
+  // recompute backing store size and redraw.
+  resize();
+});
+ro.observe(wrap);
 
 /**********************************************************
  * ON-DEMAND FULL IMAGE FETCH (for a given visible tile)
@@ -541,16 +620,19 @@ function drawGrid() {
   const x1 = Math.min(GRID.w - 1, x0 + cols);
   const y1 = Math.min(GRID.h - 1, y0 + rows);
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.lineWidth = 1;
+  // draw grid lines only when sufficiently zoomed in
+  if (scale >= GRID_LINE_VISIBILITY_THRESHOLD) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
 
-  for (let gx = x0; gx <= x1; gx++) {
-    const sx = snapPx((gx - origin.x) * tileCss);
-    ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, canvas.height / dpr); ctx.stroke();
-  }
-  for (let gy = y0; gy <= y1; gy++) {
-    const sy = snapPx((gy - origin.y) * tileCss);
-    ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(canvas.width / dpr, sy); ctx.stroke();
+    for (let gx = x0; gx <= x1; gx++) {
+      const sx = snapPx((gx - origin.x) * tileCss);
+      ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, canvas.height / dpr); ctx.stroke();
+    }
+    for (let gy = y0; gy <= y1; gy++) {
+      const sy = snapPx((gy - origin.y) * tileCss);
+      ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(canvas.width / dpr, sy); ctx.stroke();
+    }
   }
 
   const devPx = tileCss * dpr;
@@ -574,7 +656,7 @@ function drawGrid() {
 
       const img =
         (tileCss >= LOD_SWITCH_PX && e.fullReady && e.fullImg) ? e.fullImg :
-          (e.thumbReady && e.thumbImg) ? e.thumbImg : null;
+        (e.thumbReady && e.thumbImg) ? e.thumbImg : null;
 
       if (img) {
         ctx.drawImage(img, px, py, tileCss, tileCss);
@@ -726,44 +808,33 @@ function prependFeed(row) {
   const li = document.createElement('li');
   li.dataset.x = row.x;
   li.dataset.y = row.y;
+  li.className = 'feed-item';
   li.setAttribute('role', 'button');
   li.tabIndex = 0;
   li.style.cursor = 'pointer';
   li.innerHTML = `
-    <img src="${row.thumbUrl}" alt="thumb"/>
-    <div>
-      <div class="caption">${escapeHtml(row.caption || '(no caption)')}</div>
-      <div class="coords">(${row.x}, ${row.y}) · ${new Date(row.createdAt).toLocaleString()}</div>
+    <div class="placeholder-img">
+      <img src="${row.thumbUrl}" alt="thumb" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;"/>
+    </div>
+    <div class="feed-item-content">
+      <div class="feed-item-coords">(${row.x}, ${row.y})</div>
+      <div class="feed-item-caption">${escapeHtml(row.caption || '(no caption)')}</div>
     </div>
   `;
   feedList.prepend(li);
   while (feedList.children.length > 50) feedList.removeChild(feedList.lastChild);
 }
 
-function openFeedDrawer() {
-  document.body.classList.add('feed-open');
-  toggleFeedBtn.textContent = 'Hide Latest';
-  toggleFeedBtn.setAttribute('aria-pressed', 'true');
-}
-function closeFeedDrawer() {
-  document.body.classList.remove('feed-open');
-  toggleFeedBtn.textContent = 'Show Latest';
-  toggleFeedBtn.setAttribute('aria-pressed', 'false');
-}
-function isMobile() { return window.matchMedia('(max-width: 768px)').matches; }
+// Sidebar toggle event listeners
+toggleFeedBtn.addEventListener('click', toggleSidebar);
+mobileHeaderToggle.addEventListener('click', toggleSidebar);
+sidebarCloseBtn.addEventListener('click', toggleSidebar);
 
-toggleFeedBtn.addEventListener('click', () => {
-  if (isMobile()) {
-    document.body.classList.contains('feed-open') ? closeFeedDrawer() : openFeedDrawer();
-    return;
+feedBackdrop.addEventListener('click', () => {
+  if (isMobile() && sidebarOpen) {
+    toggleSidebar();
   }
-  document.body.classList.toggle('feed-hidden');
-  const hidden = document.body.classList.contains('feed-hidden');
-  toggleFeedBtn.textContent = hidden ? 'Show Latest' : 'Hide Latest';
-  toggleFeedBtn.setAttribute('aria-pressed', String(!hidden));
-  resize();
 });
-feedBackdrop.addEventListener('click', closeFeedDrawer);
 
 feedList.addEventListener('click', (e) => {
   const li = e.target.closest('li');
@@ -774,7 +845,7 @@ feedList.addEventListener('click', (e) => {
 
   animateToTile(gx, gy, 500, 5);
   setHighlight(gx, gy, 2000);
-  if (document.body.classList.contains('feed-open')) closeFeedDrawer();
+  if (isMobile() && sidebarOpen) toggleSidebar();
 });
 
 /**********************************************************
@@ -923,10 +994,21 @@ window.addEventListener('blur', () => {
 /**********************************************************
  * UPLOADS (random or target slot via dbl-click)
  **********************************************************/
-uploadBtn.addEventListener('click', () => {
+function handleUploadClick() {
   pendingSlot = null;
   fileInput.value = '';
   fileInput.click();
+}
+
+uploadBtn.addEventListener('click', handleUploadClick);
+mobileUploadBtn.addEventListener('click', handleUploadClick);
+
+// Sync caption inputs
+captionInput.addEventListener('input', (e) => {
+  mobileCaptionInput.value = e.target.value;
+});
+mobileCaptionInput.addEventListener('input', (e) => {
+  captionInput.value = e.target.value;
 });
 
 function screenToGrid(px, py) {
@@ -981,7 +1063,8 @@ fileInput.addEventListener('change', async () => {
 
   const fd = new FormData();
   fd.append('image', file);
-  if (captionInput.value) fd.append('caption', captionInput.value);
+  const caption = captionInput.value || mobileCaptionInput.value;
+  if (caption) fd.append('caption', caption);
   if (pendingSlot) {
     fd.append('x', String(pendingSlot.x));
     fd.append('y', String(pendingSlot.y));
@@ -1000,6 +1083,9 @@ fileInput.addEventListener('change', async () => {
     statusEl.textContent = 'Error: ' + err.message;
   } finally {
     pendingSlot = null;
+    // Clear both caption inputs
+    captionInput.value = '';
+    mobileCaptionInput.value = '';
     setTimeout(() => (statusEl.textContent = ''), 2500);
   }
 });
@@ -1053,5 +1139,7 @@ canvas.style.cursor = 'crosshair';
 
 fetchConfig().then(() => {
   resize();
+  applySidebarState();
+  updateToggleText();
   requestDraw();
 });
