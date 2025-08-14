@@ -14,7 +14,8 @@ import { S3Client } from '@aws-sdk/client-s3';
 import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import helmet from 'helmet';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import compression from 'compression';            // ★ NEW
+import compression from 'compression';
+import { Redis } from '@upstash/redis';
 
 /**********************************************************
  * APP + SOCKET
@@ -22,6 +23,47 @@ import compression from 'compression';            // ★ NEW
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
+
+
+/**********************************************************
+ * OPTIONAL REDIS (auto-off if not configured)
+ **********************************************************/
+function makeRedisIfConfigured() {
+  // You asked for REDIS_API_KEY as the toggle.
+  // We'll also require REDIS_URL so we know where to send requests.
+  const token = process.env.REDIS_API_KEY;
+  const url = process.env.REDIS_URL; // e.g. Upstash REST URL
+  if (!token || !url) {
+    console.log('[redis] disabled (missing REDIS_API_KEY or REDIS_URL)');
+    return null;
+  }
+  try {
+    const r = new Redis({ url, token });
+    console.log('[redis] enabled');
+    return r;
+  } catch (e) {
+    console.warn('[redis] failed to initialize, running without cache:', e?.message || e);
+    return null;
+  }
+}
+const redis = makeRedisIfConfigured();
+
+async function cacheGetJSON(key) {
+  if (!redis) return null;
+  try {
+    const v = await redis.get(key);
+    return v ? (typeof v === 'string' ? JSON.parse(v) : v) : null;
+  } catch {
+    return null;
+  }
+}
+async function cacheSetJSON(key, value, { ttlSeconds }) {
+  if (!redis) return;
+  try {
+    await redis.set(key, JSON.stringify(value), { ex: ttlSeconds });
+  } catch { /* ignore cache write errors */ }
+}
+
 
 /**********************************************************
  * MIDDLEWARE (order matters)
@@ -77,7 +119,7 @@ const appLogStream = fs.createWriteStream(appLogPath, { flags: 'a' });
 const clientLogStream = fs.createWriteStream(clientLogPath, { flags: 'a' });
 
 const ts = () => new Date().toISOString();
-const writeLine = (s, l) => { try { s.write(l + '\n'); } catch {} };
+const writeLine = (s, l) => { try { s.write(l + '\n'); } catch { } };
 
 function log(category, ...args) {
   const line = `[${ts()}] [${category}] ${args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')}`;
@@ -169,7 +211,7 @@ export async function putToR2({ key, bytes, contentType, cacheControl }) {
 export async function deleteFromR2(key) {
   try {
     await r2.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }));
-  } catch {}
+  } catch { }
 }
 
 /**********************************************************
@@ -429,14 +471,14 @@ function shutdown(sig) {
   console.log(`[shutdown] ${sig}`);
   // stop accepting new connections
   server.close(() => {
-    try { io.close(); } catch {}
-    try { db.close(); } catch {}
-    try { appLogStream.end(); } catch {}
-    try { clientLogStream.end(); } catch {}
+    try { io.close(); } catch { }
+    try { db.close(); } catch { }
+    try { appLogStream.end(); } catch { }
+    try { clientLogStream.end(); } catch { }
     process.exit(0);
   });
   // hard-exit if something hangs
   setTimeout(() => process.exit(1), 8000).unref();
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT',  () => shutdown('SIGINT'));
+process.on('SIGINT', () => shutdown('SIGINT'));

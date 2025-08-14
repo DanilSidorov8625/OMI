@@ -27,11 +27,6 @@ const wrap = document.getElementById('canvasWrap');
  * LOGGING: CONFIG + TRANSPORT (client → server)
  * - Mirrors console.* and window errors to POST /api/log
  * - Batches logs to reduce chattiness
- **********************************************************/
-/**********************************************************
- * LOGGING: CONFIG + TRANSPORT (client → server)
- * - Mirrors console.* and window errors to POST /api/log
- * - Batches logs to reduce chattiness
  * - Supports: level toggles, fetch URL ignore, sampling, runtime control
  **********************************************************/
 const LOG_ENDPOINT = '/api/log';
