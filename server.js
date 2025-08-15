@@ -15,7 +15,7 @@ import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import helmet from 'helmet';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import compression from 'compression';
-import { Redis } from '@upstash/redis';
+import { createClient } from 'redis';
 
 /**********************************************************
  * APP + SOCKET
@@ -28,40 +28,81 @@ const io = new Server(server, { cors: { origin: '*' } });
 /**********************************************************
  * OPTIONAL REDIS (auto-off if not configured)
  **********************************************************/
-function makeRedisIfConfigured() {
-  // You asked for REDIS_API_KEY as the toggle.
-  // We'll also require REDIS_URL so we know where to send requests.
-  const token = process.env.REDIS_API_KEY;
-  const url = process.env.REDIS_URL; // e.g. Upstash REST URL
-  if (!token || !url) {
-    console.log('[redis] disabled (missing REDIS_API_KEY or REDIS_URL)');
+let redis = null;
+
+function isEnabled(envVal) {
+  const v = String(envVal ?? '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
+async function makeRedisIfConfigured() {
+  // Explicit toggle as requested
+  if (!isEnabled(process.env.REDIS_ON)) {
+    console.log('[redis] disabled (REDIS_ON=false)');
     return null;
   }
+
   try {
-    const r = new Redis({ url, token });
-    console.log('[redis] enabled');
-    return r;
+    let client;
+    const host = process.env.REDIS_URL;
+    const port = Number(process.env.REDIS_PORT);
+    const password = process.env.REDIS_PASSWORD;
+
+    if (!host || !password) {
+      console.log('[redis] disabled (missing host/password and no REDIS_URL)');
+      return null;
+    }
+
+    client = createClient({
+      password,
+      socket: { host, port: port },
+    })
+
+
+    client.on('error', (err) => console.error('[redis] Client Error', err));
+
+    await client.connect();
+    console.log('[redis] connected');
+
+    // --- sanity check so you don’t chase ghosts ---
+    await client.set('health:ping', 'pong');
+    await client.expire('health:ping', 60); // expire in 60 seconds
+    const pong = await client.get('health:ping');
+    console.log('[redis] smoke test get=', pong);
+
+    return client;
   } catch (e) {
-    console.warn('[redis] failed to initialize, running without cache:', e?.message || e);
+    console.warn('[redis] init failed; continuing without cache:', e?.message || e);
+    redis = null;
     return null;
   }
 }
-const redis = makeRedisIfConfigured();
+
+redis = await makeRedisIfConfigured();
 
 async function cacheGetJSON(key) {
   if (!redis) return null;
   try {
-    const v = await redis.get(key);
-    return v ? (typeof v === 'string' ? JSON.parse(v) : v) : null;
-  } catch {
+    const s = await redis.get(key);
+    if (s) {
+      console.log('[cache] hit', key)
+      return JSON.parse(s);
+    }
+    console.log('[cache] miss', key);
+  } catch (e) {
+    console.warn('[redis] get failed for', key, e?.message || e);
     return null;
   }
 }
-async function cacheSetJSON(key, value, { ttlSeconds }) {
+
+async function cacheSetJSON(key, value, ttlSeconds = 60) {
   if (!redis) return;
   try {
-    await redis.set(key, JSON.stringify(value), { ex: ttlSeconds });
-  } catch { /* ignore cache write errors */ }
+    await redis.set(key, JSON.stringify(value));
+    await redis.expire(key, ttlSeconds); // ensure expiration
+  } catch (e) {
+    console.warn('[redis] set failed for', key, e?.message || e);
+  }
 }
 
 
@@ -69,12 +110,13 @@ async function cacheSetJSON(key, value, { ttlSeconds }) {
  * MIDDLEWARE (order matters)
  **********************************************************/
 const ORIGIN_ALLOWLIST = [
-
   'http://localhost:8080',
   'https://omnaris.xyz',
 ];
 
 const R2_DOMAIN = new URL(process.env.R2_CUSTOM_DOMAIN).host;
+const R2_CUSTOM_DOMAIN = new URL(process.env.R2_CUSTOM_DOMAIN).host;
+const R2_PUBLIC_BASE = new URL(process.env.R2_PUBLIC_BASE).host;
 
 app.set('trust proxy', 1); // needed so req.ip honors X-Forwarded-For
 
@@ -84,9 +126,10 @@ app.use(helmet({
     useDefaults: true,
     directives: {
       "default-src": ["'self'"],
-      "img-src": ["'self'", `https://${R2_DOMAIN}`, "data:"],
+      "img-src": ["'self'", `https://${R2_CUSTOM_DOMAIN}`, `https://${R2_PUBLIC_BASE}`, "data:"],
       "script-src": ["'self'", "https://cdn.socket.io"],
-      "style-src": ["'self'", "'unsafe-inline'"],
+      "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
       "connect-src": ["'self'", `https://${R2_DOMAIN}`],
       "frame-ancestors": ["'none'"],
       "object-src": ["'none'"],
@@ -204,7 +247,7 @@ export async function putToR2({ key, bytes, contentType, cacheControl }) {
     ContentType: ct,
     CacheControl: cc
   }));
-  return `${process.env.R2_PUBLIC_BASE}/${encodeURIComponent(key)}`;
+  return `${process.env.R2_CUSTOM_DOMAIN}/${encodeURIComponent(key)}`;
 }
 
 // safe delete helper for orphan cleanup
@@ -296,9 +339,17 @@ function countUploadsSince({ ip, sinceMs }) {
 /**********************************************************
  * ROUTES
  **********************************************************/
-app.get('/api/config', (req, res) => {
+app.get('/api/config', async (req, res) => {
   log('api', 'GET /api/config');
-  res.json({ grid: { w: GRID_W, h: GRID_H, slotSize: SLOT_SIZE } });
+
+  const cacheKey = 'cfg:v1';
+  const cached = await cacheGetJSON(cacheKey);
+  if (cached) return res.json(cached);
+
+  const payload = { grid: { w: GRID_W, h: GRID_H, slotSize: SLOT_SIZE } };
+  // cache ~1 hour; adjust as you like
+  await cacheSetJSON(cacheKey, payload, 3600);
+  res.json(payload);
 });
 
 const upload = multer({
@@ -403,23 +454,50 @@ app.post(
   }
 );
 
-app.get('/api/slots', slotsLimiter, (req, res) => {
+app.get('/api/slots', slotsLimiter, async (req, res) => {
   const x0 = clamp(parseInt(req.query.x0 ?? 0), 0, GRID_W - 1);
   const y0 = clamp(parseInt(req.query.y0 ?? 0), 0, GRID_H - 1);
-  res.json({ rows: fetchSlots({ x0, y0 }) });
+
+  const cacheKey = `slot:v1:${x0},${y0}`;
+  const cached = await cacheGetJSON(cacheKey);
+  if (cached) return res.json(cached);
+
+  const payload = { rows: fetchSlots({ x0, y0 }) };
+  await cacheSetJSON(cacheKey, payload, 30);
+  res.json(payload);
 });
 
-app.get('/api/grid', gridLimiter, (req, res) => {
+app.get('/api/grid', gridLimiter, async (req, res) => {
   const x0 = clamp(parseInt(req.query.x0 ?? 0), 0, GRID_W - 1);
   const y0 = clamp(parseInt(req.query.y0 ?? 0), 0, GRID_H - 1);
   const x1 = clamp(parseInt(req.query.x1 ?? GRID_W - 1), 0, GRID_W - 1);
   const y1 = clamp(parseInt(req.query.y1 ?? GRID_H - 1), 0, GRID_H - 1);
-  res.json({ rows: fetchSlots({ x0, y0, x1, y1, minimal: true }) });
+
+  const cacheKey = `grid:v1:${x0},${y0},${x1},${y1}`;
+  const cached = await cacheGetJSON(cacheKey);
+  if (cached) {
+    // log('api', 'cache hit for grid', { x0, y0, x1, y1 });
+    return res.json(cached);
+  }
+
+  const payload = { rows: fetchSlots({ x0, y0, x1, y1, minimal: true }) };
+  // log('api', 'cache miss for grid', { x0, y0, x1, y1 });
+
+  // short TTL because the grid is continuously updated by uploads
+  await cacheSetJSON(cacheKey, payload, 30);
+  res.json(payload);
 });
 
-app.get('/api/feed', feedLimiter, (req, res) => {
+app.get('/api/feed', feedLimiter, async (req, res) => {
   const limit = clamp(parseInt(req.query.limit ?? 50), 1, 200);
-  res.json({ rows: fetchSlots({ limit }) });
+
+  const cacheKey = `feed:v1:${limit}`;
+  const cached = await cacheGetJSON(cacheKey);
+  if (cached) return res.json(cached);
+
+  const payload = { rows: fetchSlots({ limit }) };
+  await cacheSetJSON(cacheKey, payload, 30);
+  res.json(payload);
 });
 
 app.get('/health', (req, res) => {
