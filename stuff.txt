@@ -1,44 +1,25 @@
-redis
-tests
-make app.js production ready and scalable
-gestures on mobile
-Load testing
-sentry
-clear logs every so often
-coolify
-buy me a coffee
-staging env
-docker compose with multiple instances
-Horizontal scaling with reds????
+Test 100% coverage on server.js and app.js
+- server.js - 0%
+- app.js - 0%
 
-
-styling and mobile styles
-put html controllers on html page... for easy access.
-
-
-What you listed (👍 do these)
-* Redis
-    * Use RedisStore for express-rate-limit.
-    * 10–20s TTL cache for /api/grid rectangles.
-    * (Later) Pub/Sub channel to fan out new_image across multiple nodes.
-* Testing
-    * Vitest + Supertest for routes; Playwright for one happy-path upload; autocannon smoke on /api/grid.
-* Make app.js prod
-    * Bundle/minify (Vite), defer load, self-host /socket.io/socket.io.js, keep CSP strict, set long cache headers.
-    * Default client logger to low-noise (debug off, sampling down).
-* Mobile gestures
-    * Pinch-zoom + two-finger pan via Pointer Events; touch-action: none on canvas.
-Add these tiny ops bits (keeps you safe)
-* TLS & proxy: run behind Caddy/NGINX; enable gzip/brotli; HTTP→HTTPS redirect.
-* Monitoring: uptime check + alert (Healthcheck/BetterStack); tail logs; a basic dashboard for error rate/429s.
-* Backups: nightly copy of instance/grid.db; R2 lifecycle (transition/orphan cleanup policy).
-* Secrets/env: .env only in deploy; rotate keys; NODE_ENV=production.
-* CI/CD: GitHub Action for npm ci, lint, tests → build → deploy.
-* Security: weekly npm audit, dependabot, lockfile; keep Helmet rules you have.
-* Readiness/health: you have /health; add a simple /ready if you add Redis (checks PING).
-“Done” definition
-* Load test passes at your target RPS with <200ms p95 on /api/grid.
-* No client console errors in a clean session.
-* Rate limiting works (no 429 storms during normal use).
-* Backups running; restore tested once.
-* One mobile pinch/pan test passes on iOS + Android.
+Buy Me A Coffee on website for money
+Load Testing on Actual server
+Make Image Loads Faster
+Clear Logs Every So often
+Docker Compose with Multiple instances
+Minify app.js & styles.css
+pm2
+.env Enviroment for Helmet, etc
+Automated Dependency Testing
+Cloudflare Config
+- Hotlink on
+- R2 Cors
+Moniting & Alerts
+- Sentry
+- UptimeRobot
+- Graphana
+CI/CD Pipline (github actions)
+- Docker Light house to watch and build for changes
+Linting/Treeshaking
+Backups of Grid.db
+Define Cloud resources as config files

@@ -26,6 +26,7 @@ out/
 
 # Coverage
 coverage/
+coverage/*
 
 # Misc
 *.tgz
@@ -37,3 +38,5 @@ coverage/
 
 instance/
 instance/*
+
+
