@@ -1,13 +1,25 @@
-Load testing
-sentry
-clear logs every so often
-coolify
-docker compose with multiple instances
-minify app.js
+Test 100% coverage on server.js and app.js
+- server.js - 70%
+- app.js - 0%
 
-
-
-
-
-fix tests
-buy me a coffee
+Buy Me A Coffee on website for money
+Load Testing on Actual server
+Make Image Loads Faster
+Clear Logs Every So often
+Docker Compose with Multiple instances
+Minify app.js & styles.css
+pm2
+.env Enviroment for Helmet, etc
+Automated Dependency Testing
+Cloudflare Config
+- Hotlink on
+- R2 Cors
+Moniting & Alerts
+- Sentry
+- UptimeRobot
+- Graphana
+CI/CD Pipline (github actions)
+- Docker Light house to watch and build for changes
+Linting/Treeshaking
+Backups of Grid.db
+Define Cloud resources as config files
