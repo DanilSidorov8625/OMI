@@ -16,6 +16,7 @@ import helmet from 'helmet';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import compression from 'compression';
 import { createClient } from 'redis';
+import { z } from 'zod';
 
 /**********************************************************
  * APP + SOCKET
@@ -24,6 +25,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+export { app, server, io };
 
 /**********************************************************
  * OPTIONAL REDIS (auto-off if not configured)
@@ -335,6 +337,46 @@ function countUploadsSince({ ip, sinceMs }) {
     .get(ip, Date.now() - sinceMs);
   return row?.n || 0;
 }
+const gridQuerySchema = z.object({
+  x0: z.coerce.number().int().min(0).default(0),
+  y0: z.coerce.number().int().min(0).default(0),
+  x1: z.coerce.number().int().max(GRID_W - 1).default(GRID_W - 1),
+  y1: z.coerce.number().int().max(GRID_H - 1).default(GRID_H - 1),
+});
+
+const uploadBodySchema = z.object({
+  x: z.coerce.number().int().min(0).max(GRID_W - 1).optional(),
+  y: z.coerce.number().int().min(0).max(GRID_H - 1).optional(),
+  caption: z.string().max(120).optional(),
+}).refine(data => (data.x !== undefined) === (data.y !== undefined), {
+    message: "Both x and y must be provided, or neither.",
+});
+
+const slotsQuerySchema = z.object({
+  x0: z.coerce.number().int().min(0).max(GRID_W - 1),
+  y0: z.coerce.number().int().min(0).max(GRID_H - 1),
+});
+
+const feedQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+const logBodySchema = z.object({
+  ts: z.string().optional(),
+  page: z.string().optional(),
+  ua: z.string().optional(),
+  lang: z.string().optional(),
+  screen: z.object({
+    w: z.number().optional(),
+    h: z.number().optional(),
+    dpr: z.number().optional(),
+  }).passthrough().optional(),
+  events: z.array(z.object({
+    level: z.string(),
+    ts: z.string(),
+    args: z.array(z.any()),
+  }).passthrough()).optional(),
+}).passthrough();
 
 /**********************************************************
  * ROUTES
@@ -355,13 +397,18 @@ app.get('/api/config', async (req, res) => {
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
+  // 
   fileFilter: (req, file, cb) => {
     if (!file.mimetype || !file.mimetype.startsWith('image/')) {
-      return cb(new Error('Only images allowed'));
+      const err = new Error('Only images allowed');
+      err.code = 'INVALID_FILE_TYPE';
+      return cb(err);
     }
     cb(null, true);
   }
 });
+
+
 
 app.post(
   '/api/upload',
@@ -369,6 +416,16 @@ app.post(
   uploadHourlyLimiter,
   upload.single('image'),
   async (req, res) => {
+    if (req.file && req.file.size > 8 * 1024 * 1024) {
+      return res.status(413).json({ error: 'File too large (max 8MB)' });
+    };
+    const validationResult = uploadBodySchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({ error: 'Invalid body', issues: validationResult.error.issues });
+    }
+
+    const { x, y, caption } = validationResult.data;
+
     const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '');
 
     const DAILY_CAP = 100;
@@ -399,10 +456,9 @@ app.post(
       }
 
       let gx, gy;
-      const { x, y, caption } = req.body;
       if (x !== undefined && y !== undefined) {
-        gx = clamp(parseInt(x, 10), 0, GRID_W - 1);
-        gy = clamp(parseInt(y, 10), 0, GRID_H - 1);
+        gx = x;
+        gy = y;
         const taken = db.prepare('SELECT 1 FROM slots WHERE x=? AND y=?').get(gx, gy);
         if (taken) return res.status(409).json({ error: 'Slot already taken' });
       } else {
@@ -432,7 +488,7 @@ app.post(
         throw err;
       }
 
-      const safeCaption = (caption ?? '').toString().slice(0, 120);
+      const safeCaption = caption || '';
       const createdAt = Date.now();
       db.prepare(`
         INSERT INTO slots (x,y,caption,created_at,ip,thumb_key,orig_key)
@@ -455,8 +511,12 @@ app.post(
 );
 
 app.get('/api/slots', slotsLimiter, async (req, res) => {
-  const x0 = clamp(parseInt(req.query.x0 ?? 0), 0, GRID_W - 1);
-  const y0 = clamp(parseInt(req.query.y0 ?? 0), 0, GRID_H - 1);
+  const validationResult = slotsQuerySchema.safeParse(req.query);
+  if (!validationResult.success) {
+    return res.status(400).json({ error: 'Invalid query parameters', issues: validationResult.error.issues });
+  }
+
+  const { x0, y0 } = validationResult.data;
 
   const cacheKey = `slot:v1:${x0},${y0}`;
   const cached = await cacheGetJSON(cacheKey);
@@ -468,10 +528,13 @@ app.get('/api/slots', slotsLimiter, async (req, res) => {
 });
 
 app.get('/api/grid', gridLimiter, async (req, res) => {
-  const x0 = clamp(parseInt(req.query.x0 ?? 0), 0, GRID_W - 1);
-  const y0 = clamp(parseInt(req.query.y0 ?? 0), 0, GRID_H - 1);
-  const x1 = clamp(parseInt(req.query.x1 ?? GRID_W - 1), 0, GRID_W - 1);
-  const y1 = clamp(parseInt(req.query.y1 ?? GRID_H - 1), 0, GRID_H - 1);
+  const validationResult = gridQuerySchema.safeParse(req.query);
+
+  if (!validationResult.success) {
+    return res.status(400).json({ error: 'Invalid query parameters', issues: validationResult.error.issues });
+  }
+
+  const { x0, y0, x1, y1 } = validationResult.data;
 
   const cacheKey = `grid:v1:${x0},${y0},${x1},${y1}`;
   const cached = await cacheGetJSON(cacheKey);
@@ -489,7 +552,12 @@ app.get('/api/grid', gridLimiter, async (req, res) => {
 });
 
 app.get('/api/feed', feedLimiter, async (req, res) => {
-  const limit = clamp(parseInt(req.query.limit ?? 50), 1, 200);
+  const validationResult = feedQuerySchema.safeParse(req.query);
+  if (!validationResult.success) {
+    return res.status(400).json({ error: 'Invalid query parameters', issues: validationResult.error.issues });
+  }
+
+  const { limit } = validationResult.data;
 
   const cacheKey = `feed:v1:${limit}`;
   const cached = await cacheGetJSON(cacheKey);
@@ -505,9 +573,22 @@ app.get('/health', (req, res) => {
 });
 
 app.post('/api/log', clientLogLimiter, express.json({ limit: '256kb' }), (req, res) => {
+  const validationResult = logBodySchema.safeParse(req.body);
+  if (!validationResult.success) {
+    // Don't log the validation error to avoid an infinite loop
+    return res.status(400).json({ error: 'Invalid log body', issues: validationResult.error.issues });
+  }
+  if (!req.headers['Content-Type']) {
+    return res.status(400).json({ error: 'Content-Type header is required' });
+  };
+  if (!req.body) {
+    return res.status(400).json({ error: 'No log data provided' });
+  };
+
+
   try {
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    const { ts: clientTs, page, ua, lang, screen, events } = req.body || {};
+    const { ts: clientTs, page, ua, lang, screen, events } = validationResult.data;
     logClient({ ip, clientTs, page, ua, lang, screen });
     for (const ev of (events || [])) logClient({ ip, ev });
     res.json({ ok: true });
@@ -516,6 +597,7 @@ app.post('/api/log', clientLogLimiter, express.json({ limit: '256kb' }), (req, r
     res.status(400).json({ ok: false });
   }
 });
+
 
 /**********************************************************
  * SOCKET EVENTS

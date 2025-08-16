@@ -6,11 +6,18 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "reset": "rm -rf uploads && mkdir uploads && rm -rf instance && mkdir instance && touch instance/grid.db && echo 'Database and uploads reset.' && npm run dev"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coveragePathIgnorePatterns": [
+      "/node_modules/"
+    ]
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",
     "@aws-sdk/lib-storage": "^3.864.0",
+    "@babel/preset-env": "^7.28.3",
     "@upstash/redis": "^1.35.3",
     "better-sqlite3": "^9.4.0",
     "compression": "^1.8.1",
@@ -20,12 +27,22 @@
     "express-rate-limit": "^8.0.1",
     "helmet": "^8.1.0",
     "multer": "^1.4.5-lts.1",
+    "pm2": "^6.0.8",
     "redis": "^5.8.1",
     "redis-cli": "^2.1.2",
     "sharp": "^0.33.3",
-    "socket.io": "^4.7.5"
+    "socket.io": "^4.7.5",
+    "zod": "^4.0.17"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "@total-typescript/shoehorn": "^0.1.2",
+    "eslint": "^9.33.0",
+    "eslint-plugin-es-x": "^9.0.0",
+    "eslint-plugin-jest": "^29.0.1",
+    "eslint-plugin-node": "^11.1.0",
+    "jest": "^30.0.5",
+    "nodemon": "^3.1.10",
+    "socket.io-client": "^4.8.1",
+    "supertest": "^7.1.4"
   }
 }
