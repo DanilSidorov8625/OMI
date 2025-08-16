@@ -164,7 +164,7 @@ const appLogStream = fs.createWriteStream(appLogPath, { flags: 'a' });
 const clientLogStream = fs.createWriteStream(clientLogPath, { flags: 'a' });
 
 const ts = () => new Date().toISOString();
-const writeLine = (s, l) => { try { s.write(l + '\n'); } catch { } };
+const writeLine = (s, l) => { try { s.write(l + '\n'); } catch { console.error('Failed to write log line', l); } };
 
 function log(category, ...args) {
   const line = `[${ts()}] [${category}] ${args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')}`;
@@ -252,9 +252,17 @@ export async function putToR2({ key, bytes, contentType, cacheControl }) {
   return `${process.env.R2_CUSTOM_DOMAIN}/${encodeURIComponent(key)}`;
 }
 
+// safe delete helper for orphan cleanup
+export async function deleteFromR2(key) {
+  try {
+    await r2.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }));
+  } catch { console.error('Failed to delete from R2', key); }
+}
+
 /**********************************************************
  * HELPERS
  **********************************************************/
+
 function pickRandomEmptySlot(db, W, H, tries = 8000) {
   const exists = db.prepare('SELECT 1 FROM slots WHERE x=? AND y=?').pluck();
   for (let i = 0; i < tries; i++) {
@@ -433,7 +441,7 @@ app.post(
 
       // DUPLICATE HASH CHECK (non-blocking)
       const hash = crypto.createHash('sha1').update(req.file.buffer).digest('hex');
-      const existing = db.prepare('SELECT x,y FROM slots WHERE orig_key LIKE ?').get(`${hash}.orig.%`);
+      // const existing = db.prepare('SELECT x,y FROM slots WHERE orig_key LIKE ?').get(`${hash}.orig.%`);
       // if (existing) return res.status(409).json({ error: `Duplicate image already at ${existing.x},${existing.y}` });
 
       const meta = await sharp(req.file.buffer).metadata();
@@ -582,7 +590,7 @@ app.post('/api/log', clientLogLimiter, express.json({ limit: '256kb' }), (req, r
   }
 });
 
-
+/* eslint-disable no-unused-vars */
 app.use((err, req, res, next) => {
   if (err?.type === 'entity.too.large') {
     return res.status(413).json({ error: 'Payload too large (max 256kb)' });
@@ -591,8 +599,7 @@ app.use((err, req, res, next) => {
   if (err?.code === 'INVALID_FILE_TYPE') return res.status(400).json({ error: 'Only images allowed' });
   return res.status(500).json({ error: 'Upload failed' });
 });
-
-
+/* eslint-enable no-unused-vars */
 
 
 /**********************************************************
@@ -620,6 +627,8 @@ server.listen(PORT, () => {
   log('boot', `One Million Images: http://localhost:${PORT}`);
   log('boot', `Grid: ${GRID_W} x ${GRID_H}`);
 });
+
+
 /**********************************************************
  * GRACEFUL SHUTDOWN (★ NEW)
  **********************************************************/
@@ -627,10 +636,10 @@ function shutdown(sig) {
   console.log(`[shutdown] ${sig}`);
   // stop accepting new connections
   server.close(() => {
-    try { io.close(); } catch { }
-    try { db.close(); } catch { }
-    try { appLogStream.end(); } catch { }
-    try { clientLogStream.end(); } catch { }
+    try { io.close(); } catch { console.error('Failed to close socket.io'); }
+    try { db.close(); } catch { console.error('Failed to close database'); }
+    try { appLogStream.end(); } catch { console.error('Failed to end app log stream'); }
+    try { clientLogStream.end(); } catch { console.error('Failed to end client log stream'); }
     process.exit(0);
   });
   // hard-exit if something hangs

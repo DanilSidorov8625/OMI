@@ -1,5 +1,5 @@
 Test 100% coverage on server.js and app.js
-- server.js - 0%
+- server.js - 77.74%
 - app.js - 0%
 
 Buy Me A Coffee on website for money

@@ -15,7 +15,6 @@ const feedBackdrop = document.getElementById('feedBackdrop');
 
 // New UI elements
 const sidebar = document.getElementById('sidebar');
-const sidebarToggle = document.getElementById('toggleFeedBtn'); // same as toggleFeedBtn
 const mobileHeaderToggle = document.getElementById('mobileHeaderToggle');
 const sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
 const main = document.querySelector('.main');
@@ -60,7 +59,9 @@ const Log = (() => {
     }
   }
   function saveConfig(cfg) {
-    try { localStorage.setItem('LOG_CONFIG', JSON.stringify(cfg)); } catch { }
+    try { localStorage.setItem('LOG_CONFIG', JSON.stringify(cfg)); } catch { 
+      console.warn('Failed to save log config to localStorage');
+     }
   }
   let CONFIG = loadConfig();
 
@@ -246,6 +247,7 @@ let pendingSlot = null;     // { x, y } when user dbl-click targets a slot
 const GRID_LINE_VISIBILITY_THRESHOLD = 0.1
 
 
+
 /**********************************************************
  * SMALL IMAGE CACHE (shared by fetch + sockets)
  **********************************************************/
@@ -368,13 +370,6 @@ function computeTargetOrigin(gx, gy, s) {
   ox = Math.max(0, Math.min(GRID.w - tilesWide, ox));
   oy = Math.max(0, Math.min(GRID.h - tilesHigh, oy));
   return { ox, oy, tilesWide, tilesHigh };
-}
-
-function goToTile(gx, gy) {
-  const { ox, oy } = computeTargetOrigin(gx, gy, scale);
-  origin.x = ox;
-  origin.y = oy;
-  requestDraw();
 }
 
 function animateToTile(gx, gy, ms = 300, targetScale = 1) {
@@ -532,7 +527,9 @@ async function ensureFullOnDemand(gx, gy) {
     if (row?.originalUrl) {
       Cache.ensureFull({ key, fullUrl: row.originalUrl });
     }
-  } catch { }
+  } catch (e) {
+    console.warn('grid fetch: failed', e);
+  }
 }
 
 /**********************************************************
@@ -764,7 +761,7 @@ async function fetchViewport() {
     try {
       data = await res.json();
     } catch (e) {
-      console.warn('grid fetch: invalid JSON');
+      console.warn('grid fetch: invalid JSON', e);
       scheduleFetch(300);
       return;
     }
@@ -1104,6 +1101,7 @@ async function fetchConfig() {
 /**********************************************************
  * SOCKETS
  **********************************************************/
+/* global io */
 const socket = io();
 socket.on('connect', () => console.log('socket connected', socket.id));
 socket.on('connect_error', (err) => console.error('socket connect_error', err));
