@@ -1,23 +1,36 @@
-# Use an official Node.js runtime as a parent image
-FROM node:18-alpine
-
-# Set the working directory in the container
+# ---- Base ----
+FROM node:18-alpine AS base
 WORKDIR /usr/src/app
-
-# Copy package.json and package-lock.json to the working directory
 COPY package*.json ./
 
-# Install any needed packages
-RUN npm install
+# ---- Dependencies ----
+FROM base AS dependencies
+RUN npm ci
 
-# Bundle app source
+# ---- Build ----
+FROM dependencies AS build
+COPY . .
+# If you had a build step, it would go here
+# RUN npm run build
+
+# ---- Production ----
+FROM node:18-alpine AS production
+WORKDIR /usr/src/app
+
+# Copy dependencies from the 'dependencies' stage
+COPY --from=dependencies /usr/src/app/node_modules ./node_modules
+# Copy application code
 COPY . .
 
-# Make port 8080 available to the world outside this container
+# Create a non-root user and switch to it
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
+# Expose the port
 EXPOSE 8080
 
-# Define environment variable
+# Set the production environment
 ENV NODE_ENV=production
 
-# Run the app when the container launches
+# Run the app
 CMD ["node", "server.js"]
