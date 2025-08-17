@@ -11,12 +11,22 @@ import crypto from 'crypto';
 import mime from 'mime-types';
 import 'dotenv/config';
 import { S3Client } from '@aws-sdk/client-s3';
-import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 import helmet from 'helmet';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import compression from 'compression';
 import { createClient } from 'redis';
 import { z } from 'zod';
+import { scheduleLogRotation } from './logRotation.js';
+
+
+
+/**********************************************************
+ * ROTATE LOGS
+ **********************************************************/
+if (process.env.NODE_ENV !== 'test') {
+  scheduleLogRotation();
+}
 
 /**********************************************************
  * APP + SOCKET
@@ -164,7 +174,7 @@ const appLogStream = fs.createWriteStream(appLogPath, { flags: 'a' });
 const clientLogStream = fs.createWriteStream(clientLogPath, { flags: 'a' });
 
 const ts = () => new Date().toISOString();
-const writeLine = (s, l) => { try { s.write(l + '\n'); } catch { console.error('Failed to write log line', l); } };
+const writeLine = (s, l) => { try { s.write(l + '\n'); } catch { console.error('[logging] writeLine failed'); } };
 
 function log(category, ...args) {
   const line = `[${ts()}] [${category}] ${args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')}`;
@@ -252,17 +262,9 @@ export async function putToR2({ key, bytes, contentType, cacheControl }) {
   return `${process.env.R2_CUSTOM_DOMAIN}/${encodeURIComponent(key)}`;
 }
 
-// safe delete helper for orphan cleanup
-export async function deleteFromR2(key) {
-  try {
-    await r2.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }));
-  } catch { console.error('Failed to delete from R2', key); }
-}
-
 /**********************************************************
  * HELPERS
  **********************************************************/
-
 function pickRandomEmptySlot(db, W, H, tries = 8000) {
   const exists = db.prepare('SELECT 1 FROM slots WHERE x=? AND y=?').pluck();
   for (let i = 0; i < tries; i++) {
@@ -471,16 +473,12 @@ app.post(
         .toBuffer();
 
       let origUrl, thumbUrl;
-      try {
-        [origUrl, thumbUrl] = await Promise.all([
-          putToR2({ key: origKey, bytes: req.file.buffer, contentType: mimeType }),
-          putToR2({ key: thumbKey, bytes: thumbBuffer, contentType: 'image/webp' })
-        ]);
-      } catch (err) {
-        await deleteFromR2(origKey);
-        await deleteFromR2(thumbKey);
-        throw err;
-      }
+
+      [origUrl, thumbUrl] = await Promise.all([
+        putToR2({ key: origKey, bytes: req.file.buffer, contentType: mimeType }),
+        putToR2({ key: thumbKey, bytes: thumbBuffer, contentType: 'image/webp' })
+      ]);
+
 
       const safeCaption = caption || '';
       const createdAt = Date.now();
@@ -602,6 +600,9 @@ app.use((err, req, res, next) => {
 /* eslint-enable no-unused-vars */
 
 
+
+
+
 /**********************************************************
  * SOCKET EVENTS
  **********************************************************/
@@ -627,8 +628,6 @@ server.listen(PORT, () => {
   log('boot', `One Million Images: http://localhost:${PORT}`);
   log('boot', `Grid: ${GRID_W} x ${GRID_H}`);
 });
-
-
 /**********************************************************
  * GRACEFUL SHUTDOWN (★ NEW)
  **********************************************************/
@@ -636,10 +635,10 @@ function shutdown(sig) {
   console.log(`[shutdown] ${sig}`);
   // stop accepting new connections
   server.close(() => {
-    try { io.close(); } catch { console.error('Failed to close socket.io'); }
-    try { db.close(); } catch { console.error('Failed to close database'); }
-    try { appLogStream.end(); } catch { console.error('Failed to end app log stream'); }
-    try { clientLogStream.end(); } catch { console.error('Failed to end client log stream'); }
+    try { io.close(); } catch { console.warn('[shutdown] io.close failed'); }
+    try { db.close(); } catch { console.warn('[shutdown] db.close failed'); }
+    try { appLogStream.end(); } catch { console.warn('[shutdown] appLogStream.end failed'); }
+    try { clientLogStream.end(); } catch { console.warn('[shutdown] clientLogStream.end failed'); }
     process.exit(0);
   });
   // hard-exit if something hangs

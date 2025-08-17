@@ -8,8 +8,10 @@ import { app, server, io, db } from '../server.js';
 
 afterAll(async () => {
     try {
-        server.close();
-        io.close();
+        await server.close();
+        await io.close();
+        await app.close();
+        await db.close();
     } catch (e) {
         // ignore cleanup errors
     }
@@ -92,13 +94,13 @@ describe('POST /api/upload (black-box, no mocks)', () => {
         expect(res.body).toHaveProperty('error');
     });
     it('400 when caption exceeds 120 chars', async () => {
-  const buf = await sharp({ create:{width:10,height:10,channels:3,background:{r:1,g:2,b:3}}}).png().toBuffer();
-  const res = await request(app).post('/api/upload')
-    .field('caption', 'a'.repeat(121))
-    .attach('image', buf, { filename:'a.png', contentType:'image/png' });
-  expect(res.status).toBe(400);
-  expect(res.body).toHaveProperty('error', 'Invalid body');
-});
+        const buf = await sharp({ create: { width: 10, height: 10, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+        const res = await request(app).post('/api/upload')
+            .field('caption', 'a'.repeat(121))
+            .attach('image', buf, { filename: 'a.png', contentType: 'image/png' });
+        expect(res.status).toBe(400);
+        expect(res.body).toHaveProperty('error', 'Invalid body');
+    });
 
 });
 
@@ -203,7 +205,6 @@ describe('POST /api/upload (happy path & constraints, no mocks)', () => {
         expect(block.body).toHaveProperty('error');
     });
 });
-
 
 describe('Server Tests (basic)', () => {
     it('health should respond with 200 and {ok:true}', async () => {
@@ -570,12 +571,12 @@ describe('GET /api/health', () => {
         expect(res.headers['content-type']).toMatch(/application\/json/);
     });
     it('helmet security headers present on /api/health', async () => {
-  const r = await request(app).get('/api/health');
-  expect(r.status).toBe(200);
-  expect(r.headers['content-security-policy']).toBeDefined();
-  expect(r.headers['referrer-policy']).toMatch(/strict-origin-when-cross-origin/i);
-  // COEP disabled by config, so no expectation there.
-});
+        const r = await request(app).get('/api/health');
+        expect(r.status).toBe(200);
+        expect(r.headers['content-security-policy']).toBeDefined();
+        expect(r.headers['referrer-policy']).toMatch(/strict-origin-when-cross-origin/i);
+        // COEP disabled by config, so no expectation there.
+    });
 
 });
 
@@ -664,34 +665,34 @@ describe('POST /api/log', () => {
         expect([200, 400]).toContain(res.statusCode);
     });
     it('200 with minimal {} body', async () => {
-  const res = await request(app)
-    .post('/api/log')
-    .set('content-type', 'application/json')
-    .send({});
-  expect(res.status).toBe(200);
-  expect(res.body).toEqual({ ok: true });
-});
+        const res = await request(app)
+            .post('/api/log')
+            .set('content-type', 'application/json')
+            .send({});
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ ok: true });
+    });
 
-it('still 200 today with wrong content-type (server only checks presence)', async () => {
-  const res = await request(app)
-    .post('/api/log')
-    .set('content-type', 'text/plain') // wrong, but your code accepts it
-    .send(JSON.stringify({ events: [] }));
-  expect(res.status).toBe(200);
-});
-it('413 when payload > 256kb', async () => {
-  const res = await request(app)
-    .post('/api/log')
-    .set('content-type', 'application/json')
-    .send({ page: 'x'.repeat(300 * 1024) });
-  expect(res.status).toBe(413);
-});
-it('204 on OPTIONS preflight', async () => {
-  const res = await request(app).options('/api/log')
-    .set('origin', 'http://localhost:8080')
-    .set('access-control-request-method', 'POST');
-  expect([200,204]).toContain(res.status); // cors can return 204; helmet sometimes 200
-  // Should not be rate-limited
-  expect(res.headers['access-control-allow-origin']).toBeDefined();
-});
+    it('still 200 today with wrong content-type (server only checks presence)', async () => {
+        const res = await request(app)
+            .post('/api/log')
+            .set('content-type', 'text/plain') // wrong, but your code accepts it
+            .send(JSON.stringify({ events: [] }));
+        expect(res.status).toBe(200);
+    });
+    it('413 when payload > 256kb', async () => {
+        const res = await request(app)
+            .post('/api/log')
+            .set('content-type', 'application/json')
+            .send({ page: 'x'.repeat(300 * 1024) });
+        expect(res.status).toBe(413);
+    });
+    it('204 on OPTIONS preflight', async () => {
+        const res = await request(app).options('/api/log')
+            .set('origin', 'http://localhost:8080')
+            .set('access-control-request-method', 'POST');
+        expect([200, 204]).toContain(res.status); // cors can return 204; helmet sometimes 200
+        // Should not be rate-limited
+        expect(res.headers['access-control-allow-origin']).toBeDefined();
+    });
 });

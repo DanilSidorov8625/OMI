@@ -11,6 +11,7 @@ export default defineConfig([
       "__test__/**",
       "coverage/**",
       "logs/**",
+      "log*"
     ],
   },
   {
