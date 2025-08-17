@@ -29,5 +29,5 @@ Cloudflare Config
 - Hotlink on
 - R2 Cors
 Docker Compose with Multiple instances
-Minify styles.css
+Minify styles.css!
 
