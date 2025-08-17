@@ -6,13 +6,8 @@ V2
 - PM2?
 
 
-Docker Compose with Multiple instances
 
-Minify app.js & styles.css
-
-Cloudflare Config
-- Hotlink on
-- R2 Cors
+Minify styles.css
 
 CI/CD Pipline (github actions)
 - Docker Light house to watch and build for changes
@@ -31,6 +26,9 @@ Clear Logs Every So often
 Moniting & Alerts
 - Sentry
 - UptimeRobot
-
-
+Minify app.js
+Cloudflare Config
+- Hotlink on
+- R2 Cors
+Docker Compose with Multiple instances
 
