@@ -1,28 +1,36 @@
-Test coverage
-- Server Side - 80%
-- Client Side - 0%
+V2
+- Make Images Load Faster
+- Load Testing on Actual server
+- PlayWright
+- Delete my Logging Things? - Sentry?
+- PM2?
 
-Buy Me A Coffee/Venmo on website for money
-Load Testing on Actual server
-Make Image Loads Faster
-Clear Logs Every So often
+
 Docker Compose with Multiple instances
+
 Minify app.js & styles.css
-pm2
-.env Enviroment for Helmet, etc
-Automated Dependency Testing
+
 Cloudflare Config
 - Hotlink on
 - R2 Cors
+
+CI/CD Pipline (github actions)
+- Docker Light house to watch and build for changes
+- Automated Dependency Testing
+
+Backups of Grid.db
+
+
+DONE:
+Linting
+Testing
+- Server Side - 80%
+- Client Side - 0%
+Buy Me A Coffee/Venmo on website for money
+Clear Logs Every So often
 Moniting & Alerts
 - Sentry
 - UptimeRobot
-- Graphana
-CI/CD Pipline (github actions)
-- Docker Light house to watch and build for changes
-Linting/Treeshaking
-Backups of Grid.db
-Define Cloud resources as config files
-Linting: X
+
 
 

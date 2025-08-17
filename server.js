@@ -18,8 +18,8 @@ import compression from 'compression';
 import { createClient } from 'redis';
 import { z } from 'zod';
 import { scheduleLogRotation } from './logRotation.js';
-
-
+import './instrument.js'; // Sentry instrumentation
+import * as Sentry from "@sentry/node"
 
 /**********************************************************
  * ROTATE LOGS
@@ -139,10 +139,10 @@ app.use(helmet({
     directives: {
       "default-src": ["'self'"],
       "img-src": ["'self'", `https://${R2_CUSTOM_DOMAIN}`, `https://${R2_PUBLIC_BASE}`, "data:"],
-      "script-src": ["'self'", "https://cdn.socket.io"],
+      "script-src": ["'self'", "https://cdn.socket.io", "https://js.sentry-cdn.com", "https://browser.sentry-cdn.com"],
       "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
-      "connect-src": ["'self'", `https://${R2_DOMAIN}`],
+      "connect-src": ["'self'", `https://${R2_DOMAIN}`, "https://*.ingest.us.sentry.io", "https://*.sentry.io"],
       "frame-ancestors": ["'none'"],
       "object-src": ["'none'"],
       "upgrade-insecure-requests": [],
@@ -546,7 +546,6 @@ app.get('/api/feed', feedLimiter, async (req, res) => {
   if (!validationResult.success) {
     return res.status(400).json({ error: 'Invalid query parameters', issues: validationResult.error.issues });
   }
-
   const { limit } = validationResult.data;
 
   const cacheKey = `feed:v1:${limit}`;
@@ -587,6 +586,8 @@ app.post('/api/log', clientLogLimiter, express.json({ limit: '256kb' }), (req, r
     res.status(400).json({ ok: false });
   }
 });
+
+Sentry.setupExpressErrorHandler(app);
 
 /* eslint-disable no-unused-vars */
 app.use((err, req, res, next) => {
