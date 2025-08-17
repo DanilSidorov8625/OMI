@@ -1,8 +1,8 @@
-Test 100% coverage on server.js and app.js
-- server.js - 77.74%
-- app.js - 0%
+Test coverage
+- Server Side - 80%
+- Client Side - 0%
 
-Buy Me A Coffee on website for money
+Buy Me A Coffee/Venmo on website for money
 Load Testing on Actual server
 Make Image Loads Faster
 Clear Logs Every So often
@@ -24,3 +24,5 @@ Linting/Treeshaking
 Backups of Grid.db
 Define Cloud resources as config files
 Linting: X
+
+

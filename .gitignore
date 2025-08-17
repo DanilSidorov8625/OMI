@@ -40,3 +40,7 @@ instance/
 instance/*
 
 
+zippedLogs/*
+zippedLogs/
+
+
