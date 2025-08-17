@@ -1,3 +1,4 @@
+
 # ---- Base ----
 FROM node:18-alpine AS base
 WORKDIR /usr/src/app
@@ -22,9 +23,8 @@ COPY --from=dependencies /usr/src/app/node_modules ./node_modules
 # Copy application code
 COPY . .
 
-# Create a non-root user and switch to it
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-USER appuser
+# Create directories that will be mounted as volumes
+RUN mkdir -p /usr/src/app/instance /usr/src/app/logs /usr/src/app/zippedLogs
 
 # Expose the port
 EXPOSE 8080
@@ -32,5 +32,5 @@ EXPOSE 8080
 # Set the production environment
 ENV NODE_ENV=production
 
-# Run the app
+# Run as root (no USER directive)
 CMD ["node", "server.js"]
