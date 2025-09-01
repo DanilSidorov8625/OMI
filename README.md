@@ -27,6 +27,10 @@ The result was **One Million Images**:
 - **Zoom behavior**: At a distance you see thumbnails; zoom in close enough and the full-resolution image swaps in.
 
 ---
+## 📸 Preview
+
+![Preview](./Preview-OMI.png)
+---
 
 ## 🔑 What Makes It Interesting
 
