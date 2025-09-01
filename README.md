@@ -29,7 +29,7 @@ The result was **One Million Images**:
 ---
 ## 📸 Preview
 
-![Preview](./Preview-OMI.png)
+![Preview](./Preview-OMI.avif)
 ---
 
 ## 🔑 What Makes It Interesting
